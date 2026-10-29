@@ -1,0 +1,879 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>完美的去噪器只会背，网络为什么会创造：扩散模型泛化研究整理</title>
+<meta name="description" content="2023–2026 年关于扩散模型为什么能生成训练集里没有的图的核心研究：记忆与泛化的分界、网络偏向什么样的解、组合泛化。每篇论文写清实验和结论。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="完美的去噪器只会背，网络为什么会创造：扩散模型泛化研究整理">
+<meta property="og:description" content="2023–2026 年关于扩散模型为什么能生成训练集里没有的图的核心研究：记忆与泛化的分界、网络偏向什么样的解、组合泛化。">
+<meta name="theme-color" content="#F0F2F1">
+<style>
+
+:root{
+  color-scheme: light;
+  --paper:#F0F2F1; --plate:#FFFFFF; --wash:#E6EAE9;
+  --ink:#17212B; --ink-2:#4C5866; --muted:#7E8894; --rule:#D3D9DC; --grid:#E4E8E9;
+  --plus:#1F63B8;   --plus-w:rgba(31,99,184,.12);
+  --minus:#C2306F;  --minus-w:rgba(194,48,111,.12);
+  --mean:#9B8E7E;   --mean-w:rgba(155,142,126,.18);
+  --guess:#D69500;  --guess-ink:#8F6200; --guess-w:rgba(214,149,0,.14);
+  --noise:#9AA5B1;
+  --serif:"Songti SC","Noto Serif SC","Source Han Serif SC","STSong","SimSun",serif;
+  --sans:"PingFang SC","Noto Sans SC","Hiragino Sans GB","Microsoft YaHei",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --kai:"Kaiti SC","STKaiti","KaiTi","BiauKai","AR PL UKai CN","Songti SC",serif;
+  --math:"STIX Two Text","Times New Roman","Songti SC",serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font:16.5px/1.85 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--plus);text-underline-offset:3px}
+:focus-visible{outline:2px solid var(--guess);outline-offset:2px}
+h1,h2,h3{font-family:var(--serif);font-weight:700;color:var(--ink)}
+p{margin:12px 0}
+b,strong{font-weight:650}
+sub{font-size:.72em;line-height:0}
+.m{font-family:var(--math);font-size:1.07em;white-space:nowrap}
+.m i{font-style:italic}
+
+/* page frame */
+.wrap{max-width:1120px;margin:0 auto;padding:0 32px}
+.hero{padding:64px 0 10px}
+.hero h1{font-size:58px;line-height:1.13;letter-spacing:.02em;margin:0 0 22px}
+.lede{font-family:var(--serif);font-size:20px;line-height:1.8;max-width:34em;margin:0 0 28px;color:var(--ink)}
+.toc{margin:30px 0 0;padding:16px 0 0;border-top:1px solid var(--rule);display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:4px 28px;font-size:14.5px}
+.toc a{color:var(--ink-2);text-decoration:none;display:flex;gap:10px}
+.toc a:hover{color:var(--ink)}
+.toc a span{font-family:var(--serif);font-weight:700;color:var(--ink);min-width:1.2em}
+
+section{padding-top:56px}
+h2{font-size:31px;line-height:1.3;margin:0 0 6px;display:flex;gap:18px;align-items:baseline}
+h2 .n{font-size:40px;line-height:1;color:var(--guess)}
+h3{font-size:22px;line-height:1.45;margin:44px 0 6px}
+.col{max-width:690px}
+.pair{display:grid;grid-template-columns:minmax(0,690px) 270px;column-gap:48px;align-items:start}
+.pair>.col>p:first-child{margin-top:0}
+.note{font-family:var(--kai);font-size:17px;line-height:1.7;color:var(--guess-ink);border-top:2px solid var(--guess);padding-top:8px;margin-top:6px}
+.note b{font-weight:700}
+.eq{font-family:var(--math);font-size:20px;line-height:1.6;margin:14px 0;padding:4px 0 4px 26px;color:var(--ink)}
+.eq i{font-style:italic}
+.eq .cm{font-family:var(--sans);font-size:14px;color:var(--muted);margin-left:14px}
+.claim{font-family:var(--serif);font-size:19.5px;line-height:1.75;margin:22px 0;padding:14px 0 14px 22px;border-left:4px solid var(--ink);max-width:690px}
+.small{font-size:14px;color:var(--ink-2);line-height:1.75}
+ul.plain{margin:10px 0;padding-left:22px}
+ul.plain li{margin:6px 0}
+.deep{background:var(--wash);border-radius:6px;padding:6px 26px 14px;margin:28px 0 0;max-width:744px}
+.deep h3{margin-top:22px}
+
+/* plates (figures) */
+.plate{background:var(--plate);border:1px solid var(--rule);border-radius:8px;padding:20px 22px 18px;margin:26px 0}
+.plate-t{font-family:var(--serif);font-weight:700;font-size:17px;margin:0 0 4px}
+.plate-s{font-size:14px;color:var(--ink-2);margin:0 0 10px;line-height:1.7}
+.cap{font-size:13.5px;color:var(--ink-2);line-height:1.75;margin:10px 0 0}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px 22px;font-size:14px;color:var(--ink-2);margin:6px 0 10px}
+.controls label{display:inline-flex;align-items:center;gap:8px}
+.controls output{font-variant-numeric:tabular-nums;color:var(--ink);min-width:3.2em;display:inline-block}
+input[type=range]{accent-color:var(--ink);width:170px}
+.chips{display:inline-flex;gap:6px;flex-wrap:wrap}
+.chips button{font:inherit;font-size:14px;border:1px solid var(--rule);background:var(--plate);color:var(--ink-2);border-radius:999px;padding:3px 13px;cursor:pointer}
+.chips button:hover{border-color:var(--ink-2)}
+.chips button[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn{font:inherit;font-size:14px;border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:6px;padding:3px 14px;cursor:pointer}
+.legend{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:13px;color:var(--ink-2)}
+.legend>span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:14px;height:4px;border-radius:2px;display:inline-block}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.kai-live{font-family:var(--kai);font-size:18px;color:var(--guess-ink);min-height:1.7em}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 28px;margin:14px 0 0}
+.stat{border-top:1px solid var(--rule);padding-top:8px}
+.stat .v{font-family:var(--serif);font-size:30px;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums}
+.stat .k{font-size:13px;color:var(--ink-2)}
+.readout{font-size:14px;color:var(--ink-2);background:var(--wash);border-radius:6px;padding:8px 12px;margin:10px 0 0;font-variant-numeric:tabular-nums;line-height:1.8}
+.readout b{color:var(--ink)}
+.twin{display:grid;grid-template-columns:1.15fr 1fr;gap:22px}
+.panel-t{font-size:13.5px;color:var(--ink-2);margin:0 0 2px}
+.pbar{display:flex;height:22px;border-radius:4px;overflow:hidden;margin:6px 0 0;font-size:12.5px;color:#fff;font-variant-numeric:tabular-nums}
+.pbar div{display:flex;align-items:center;padding:0 8px;white-space:nowrap;overflow:hidden;transition:width .12s linear}
+canvas{display:block}
+svg{display:block;width:100%;height:auto}
+svg text{font-family:var(--sans)}
+
+/* flow diagram in section 0 */
+.flow{display:grid;grid-template-columns:64px 1fr;gap:14px 16px;align-items:center;margin:20px 0;max-width:900px}
+.flow .lab{font-family:var(--serif);font-weight:700;font-size:17px}
+.flow .row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:14.5px}
+.flow .bx{border:1px solid var(--rule);background:var(--plate);border-radius:5px;padding:4px 11px;white-space:nowrap}
+.flow .bx.net{border-color:var(--ink);font-weight:600}
+.flow .bx.out-m{background:var(--mean-w);border-color:var(--mean)}
+.flow .bx.out-s{background:var(--plus-w);border-color:var(--plus)}
+.flow .ar{color:var(--muted)}
+.flow .res{font-family:var(--kai);font-size:16.5px;color:var(--guess-ink);margin-left:6px}
+
+/* targets */
+.targets{display:grid;grid-template-columns:1fr 1fr;gap:0;margin:20px 0;max-width:900px;border:1px solid var(--rule);border-radius:8px;overflow:hidden;background:var(--plate)}
+.targets>div{padding:16px 20px}
+.targets>div+div{border-left:1px solid var(--rule)}
+.targets h4{font-family:var(--serif);font-size:18px;margin:0 0 6px}
+.targets p{margin:0;font-size:15px;line-height:1.75;color:var(--ink-2)}
+.targets .verdict{margin-top:10px;font-family:var(--kai);font-size:17px;color:var(--ink)}
+
+/* cats */
+.catgrid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:22px;align-items:start}
+.thumbs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.thumbs canvas{width:100%;height:auto;border-radius:4px;transition:opacity .2s}
+.thumbs canvas.off{opacity:.22}
+.avgbox canvas{width:100%;height:auto;border-radius:4px;border:1px solid var(--rule)}
+.avgbox .panel-t{margin-bottom:6px}
+
+/* tables */
+table.t{border-collapse:collapse;width:100%;font-size:14.5px;margin:12px 0;max-width:900px}
+.t th,.t td{border-bottom:1px solid var(--grid);padding:7px 10px;text-align:left;vertical-align:top}
+.t th{font-weight:600;font-size:13.5px;color:var(--ink-2);border-bottom:1px solid var(--rule)}
+.t td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.final{font-family:var(--serif);font-size:27px;line-height:1.65;max-width:30em;margin:18px 0 0}
+.refs{font-size:14px;color:var(--ink-2);padding-left:20px}
+.refs li{margin:5px 0}
+footer{color:var(--muted);font-size:13px;padding:44px 0 50px;max-width:690px}
+
+@media (max-width:1100px){
+  .pair{grid-template-columns:1fr}
+  .note{max-width:690px;margin:4px 0 8px}
+}
+@media (max-width:820px){
+  .wrap{padding:0 18px}
+  .hero{padding-top:40px}
+  .hero h1{font-size:40px}
+  .lede{font-size:18px}
+  h2{font-size:25px}
+  h2 .n{font-size:32px}
+  .twin,.catgrid,.targets{grid-template-columns:1fr}
+  .avgbox{max-width:360px}
+  .targets>div+div{border-left:0;border-top:1px solid var(--rule)}
+  .stats{grid-template-columns:1fr 1fr 1fr;gap:0 12px}
+  .stat .v{font-size:23px}
+  .plate{padding:16px 14px}
+  .flow{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}.pbar div,.thumbs canvas{transition:none}}
+ol.plain{margin:10px 0;padding-left:22px}
+ol.plain li{margin:6px 0}
+
+/* ---- 新增 ---- */
+.imgstrip{display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));gap:6px}
+.imc canvas{display:block;width:100%;height:auto;image-rendering:pixelated;border-radius:3px;border:1px solid var(--rule)}
+.imc .lb{font-size:11.5px;line-height:1.45;color:var(--ink-2);text-align:center;margin-top:3px;font-variant-numeric:tabular-nums}
+.imc.guess canvas{border-color:var(--guess)}
+.imc.out canvas{border:2px solid var(--guess-ink)}
+.rowlab{font-size:13.5px;color:var(--ink-2);margin:10px 0 5px}
+.imrow{display:grid;grid-template-columns:52px repeat(6,minmax(0,1fr));gap:6px;align-items:center;margin:0 0 6px}
+.imrow .rl{font-size:13px;color:var(--ink);font-weight:600}
+
+.kp{font-family:var(--serif);font-size:20px;line-height:1.75;margin:14px 0 18px;padding:12px 0 12px 20px;border-left:4px solid var(--guess);max-width:720px;color:var(--ink)}
+.kp b{font-weight:700}
+.half{margin:72px 0 0;padding:26px 0 18px;border-top:3px solid var(--ink);display:flex;gap:22px;align-items:baseline;flex-wrap:wrap}
+.half .hl{font-family:var(--serif);font-weight:700;font-size:36px;line-height:1.2}
+.half .hs{font-size:15.5px;color:var(--ink-2);max-width:40em}
+a.g{color:inherit;text-decoration:underline dotted;text-decoration-color:var(--muted);text-underline-offset:4px;cursor:help}
+a.g:hover,a.g:focus-visible{color:var(--plus);text-decoration-color:var(--plus)}
+#gpop{position:absolute;z-index:60;max-width:360px;background:#fff;border:1px solid var(--rule);border-radius:8px;box-shadow:0 8px 28px rgba(23,33,43,.14);padding:10px 13px 11px;font-size:13.5px;line-height:1.72;color:var(--ink-2);opacity:0;visibility:hidden;transition:opacity .12s}
+#gpop.on{opacity:1;visibility:visible}
+#gpop .gh{display:block;color:var(--ink);font-family:var(--serif);font-weight:700;font-size:15.5px;margin-bottom:3px}
+#gpop a.g{pointer-events:none;text-decoration:none}
+table.sym{border-collapse:collapse;font-size:14.5px;margin:6px 0 0;width:100%;max-width:820px}
+.sym td{padding:6px 10px;border-bottom:1px solid var(--grid);vertical-align:top}
+.sym td:first-child{font-family:var(--math);font-size:16.5px;white-space:nowrap;width:120px;color:var(--ink)}
+.symbox{background:var(--plate);border:1px solid var(--rule);border-radius:8px;padding:14px 20px 12px;margin:22px 0 0}
+.symbox .plate-t{margin-bottom:2px}
+dl.gloss{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:0 36px;margin:16px 0 0}
+.gi{padding:12px 0 10px;border-top:1px solid var(--rule);scroll-margin-top:16px}
+.gi dt{font-family:var(--serif);font-weight:700;font-size:16.5px;color:var(--ink)}
+.gi dd{margin:3px 0 0;font-size:14.5px;line-height:1.78;color:var(--ink-2)}
+.gi:target{background:var(--guess-w);box-shadow:-10px 0 0 var(--guess-w),10px 0 0 var(--guess-w)}
+.gsec{font-family:var(--serif);font-size:18px;font-weight:700;margin:30px 0 0;color:var(--ink-2)}
+.toc2{margin:30px 0 0;padding:16px 0 0;border-top:1px solid var(--rule);display:grid;grid-template-columns:1fr 1fr;gap:6px 40px;font-size:14.5px}
+.toc2 .tg{font-family:var(--serif);font-weight:700;color:var(--ink);margin-bottom:4px}
+.toc2 a{color:var(--ink-2);text-decoration:none;display:flex;gap:10px;padding:2px 0}
+.toc2 a:hover{color:var(--ink)}
+.toc2 a span{font-family:var(--serif);font-weight:700;color:var(--ink);min-width:1.6em}
+.bx2{display:inline-block;border:1px solid var(--rule);border-radius:5px;padding:1px 9px;background:var(--plate)}
+.stack3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 28px;margin:12px 0 0}
+@media (max-width:820px){
+  .toc2{grid-template-columns:1fr}
+  .half .hl{font-size:28px}
+  .kp{font-size:18px}
+  .stack3{grid-template-columns:1fr}
+}
+
+/* ---- 本页新增 ---- */
+.pp{border-left:3px solid var(--rule);padding:2px 0 2px 20px;margin:28px 0;max-width:860px;scroll-margin-top:16px}
+.pp.t0{border-left-color:var(--plus)} .pp.t1{border-left-color:var(--guess)} .pp.t2{border-left-color:var(--minus)}
+.pp:target{background:var(--guess-w);box-shadow:-24px 0 0 var(--guess-w),12px 0 0 var(--guess-w)}
+.pp h4{font-family:var(--serif);font-size:18px;line-height:1.45;margin:0 0 3px;color:var(--ink)}
+.pp .pm{font-size:13.5px;color:var(--ink-2);margin:0 0 10px;line-height:1.6}
+.pr{display:grid;grid-template-columns:3.4em minmax(0,1fr);gap:0 14px;margin:7px 0;font-size:15.5px;line-height:1.8}
+.pr>span{font-size:13px;color:var(--muted);padding-top:3px}
+.pr p{margin:0}
+.pr ul{margin:0;padding-left:18px}
+.pr li{margin:3px 0}
+.pk>p{font-family:var(--kai);font-size:17.5px;color:var(--ink)}
+.pre{display:inline-block;font-size:12px;line-height:18px;border:1px solid var(--minus);color:var(--minus);border-radius:4px;padding:0 6px;margin-left:8px;vertical-align:2px;font-family:var(--sans)}
+.dis{background:var(--wash);border-radius:6px;padding:14px 24px 16px;margin:26px 0;max-width:860px}
+.dis h4{font-family:var(--serif);font-size:18px;margin:4px 0 6px}
+.dis ul{margin:6px 0;padding-left:20px}
+.dis li{margin:6px 0}
+.lanekey{display:flex;flex-wrap:wrap;gap:4px 20px;font-size:13px;color:var(--ink-2);margin:6px 0 0}
+.lanekey span{display:inline-flex;align-items:center;gap:7px}
+.lanekey i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.lanekey i.ring{background:none;border:2px solid var(--ink-2);width:12px;height:12px}
+#tlSvg a:hover circle.dot,#tlSvg a:focus circle.dot{stroke:var(--ink);stroke-width:2}
+#tlSvg a:hover text,#tlSvg a:focus text{fill:var(--ink)}
+.sum3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 30px;margin:26px 0 0}
+.sum3>div{border-top:3px solid var(--rule);padding-top:10px}
+.sum3>div.t0{border-top-color:var(--plus)} .sum3>div.t1{border-top-color:var(--guess)} .sum3>div.t2{border-top-color:var(--minus)}
+.sum3 h3{font-size:18px;margin:0 0 6px}
+.sum3 p{font-size:15px;line-height:1.8;margin:0;color:var(--ink-2)}
+.tbl-papers td:first-child{width:38%}
+.tbl-papers td .pm2{display:block;font-size:12.5px;color:var(--muted)}
+.cons{white-space:nowrap;font-size:13px}
+@media (max-width:820px){
+  .pr{grid-template-columns:1fr}
+  .pr>span{padding-top:0}
+  .sum3{grid-template-columns:1fr;gap:16px}
+}
+</style>
+</head>
+<body>
+
+<header class="wrap hero">
+  <h1>完美的去噪器只会背，<br>网络为什么会创造</h1>
+  <p class="lede">在有限的训练集上，让去噪误差最小的那个去噪器有现成的公式，用它采样只会还原训练图。真实训练出来的扩散模型却能画出新图。2023 年以来的研究大致从三个方向回答"新图从哪来"：训练过程、网络偏向的解、概念组合。这一页按问题整理其中最主流和最新的工作，每节第一句是结论，每篇论文写清楚做了什么实验、得到什么结果。</p>
+
+  <div class="sum3">
+    <div class="t0"><h3>先泛化，后记忆</h3><p>同一个模型训练时，生成质量先到最好，过一段时间才开始复制训练图。这段窗口的长度随数据量线性增长；数据够多时，训练结束都不会开始背。</p></div>
+    <div class="t1"><h3>局部拼贴，加上全局一致</h3><p>在中等噪声段，网络偏离"只会背"的最优解，它的输出很大程度上能用"每一小块从训练图里找相似小块再拼起来"解释；注意力让拼贴整体说得通。局部性来自网络结构还是数据统计，仍有争议。</p></div>
+    <div class="t2"><h3>组合是乘出来的</h3><p>模型能画出没见过的概念组合，但成功率约等于各单项能力相乘，所以出现得很突然。它依赖概念能在位置或条件上分开；位置关系、属性绑定、计数至今最常失败。</p></div>
+  </div>
+
+  <figure class="plate" style="margin-top:28px" aria-labelledby="tlT">
+    <p class="plate-t" id="tlT">研究地图：2023 年 10 月到 2026 年 8 月</p>
+    <div id="tlSvg"></div>
+    <div class="lanekey">
+      <span><i style="background:var(--plus)"></i>何时背、何时泛化（第 1 节）</span>
+      <span><i style="background:var(--guess)"></i>网络偏向什么解（第 2 节）</span>
+      <span><i style="background:var(--minus)"></i>组合泛化（第 3 节）</span>
+      <span><i class="ring"></i>获奖、口头报告或 spotlight</span>
+    </div>
+    <p class="cap">按 arXiv 首次提交的月份排列。点一下圆点，跳到对应的论文条目。</p>
+  </figure>
+
+  <nav class="toc2" aria-label="目录">
+    <div>
+      <a href="#s0"><span>0</span>出发点：完美的去噪器为什么只会背</a>
+      <a href="#s1"><span>1</span>什么时候背，什么时候泛化</a>
+      <a href="#s2"><span>2</span>网络偏向什么样的解</a>
+      <a href="#s3"><span>3</span>组合泛化</a>
+    </div>
+    <div>
+      <a href="#s4"><span>4</span>拼成一张图：共识与争议</a>
+      <a href="#s5"><span>5</span>论文总表</a>
+      <a href="#gloss"><span>·</span>术语表</a>
+      <a href="index.html#s11-0"><span>↗</span>配套页：一步与多步、图片演示</a>
+    </div>
+  </nav>
+</header>
+
+<main class="wrap">
+
+<!-- ============ 0 ============ -->
+<section id="s0">
+  <h2><span class="n">0</span>出发点：完美的去噪器为什么只会背</h2>
+  <p class="kp"><b>在 N 张训练图上，让 MSE 最小的去噪器是"按'眼前这张噪声图来自每一张训练图的可能'，把训练图加权平均"。用它一路去噪，结果必然落回某一张训练图。真实模型能画新图，只能是因为它没有学成这个解。</b></p>
+  <div class="pair">
+    <div class="col">
+      <p>这个去噪器叫<a class="g" href="#g-empirical">经验最优去噪器</a>，写成公式是：</p>
+      <p class="eq">D*(<i>x<sub>t</sub></i>, <i>t</i>) = Σ<sub><i>i</i></sub> <i>w<sub>i</sub></i> · <i>x</i><sub><i>i</i></sub>，&nbsp;<i>w<sub>i</sub></i> ∝ exp( −‖<i>x<sub>t</sub></i> − α<sub><i>t</i></sub> <i>x</i><sub><i>i</i></sub>‖² / 2σ<sub><i>t</i></sub>² )</p>
+      <p>其中 x<sub>i</sub> 是第 i 张训练图，α<sub>t</sub>、σ<sub>t</sub> 是加噪规则里原图和噪声各占的比例。它是训练目标在这个训练集上的精确最优解：网络训练得越"准"，就越接近它。配套页第 11 节的图片演示用的就是它，结果总是还原成 12 只训练猫中的某一只；第 12 节的"局部去噪器"开关，则演示了不完美的版本怎样拼出新图。</p>
+    </div>
+    <p class="note">训练的目标是逼近一个"只会背"的解；新图来自没逼近到的那部分。</p>
+  </div>
+
+  <article class="pp t0" id="p-biroli">
+    <h4>Dynamical regimes of diffusion models</h4>
+    <p class="pm">Biroli、Bonnaire、De Bortoli、Mézard，Nature Communications 2024，<a href="https://arxiv.org/abs/2402.18491">arXiv 2402.18491</a></p>
+    <div class="pr"><span>实验</span><p>用统计物理的方法分析"采用经验最优去噪器时，采样过程会经历什么"，再在 MNIST、CIFAR、ImageNet 16/32、LSUN 64×64 的两类子集上，用一个约 2570 万参数的 U-Net 验证。</p></div>
+    <div class="pr"><span>结论</span><ul>
+      <li><b>物种分化时刻</b>（speciation）：采样到这一刻，生成哪一类就定下来了。它由数据<a class="g" href="#g-pca">协方差</a>最大的特征值 Λ 决定，t<sub>S</sub> = ½ log Λ；实测值如 CIFAR 1.41、LSUN 2.05，类别一致性在 t / t<sub>S</sub> ≈ 1 附近突然跳升。</li>
+      <li><b>坍缩时刻</b>（collapse）：再往后，轨迹被吸到某一张训练图上，这一段就对应记忆。</li>
+      <li>用精确的经验 score 时，要避免坍缩，训练集大小需要随数据维度<b>指数</b>增长；对图像来说这不可能做到。</li>
+    </ul></div>
+    <div class="pr pk"><span>一句话</span><p>完美拟合训练集的模型一定会背；配套页演示里"8 步采样到 t = 0.75 后验就 100% 锁定一只猫"，就是这种坍缩。</p></div>
+  </article>
+
+  <div class="col">
+    <p>所以，"不完美"有两种来源，分别是下面两节：</p>
+    <ul class="plain">
+      <li><b>来不及背</b>：训练过程中，泛化比记忆先出现（第 1 节）。</li>
+      <li><b>背不了，或者偏向别的解</b>：网络结构、训练方式让它更容易学到某些更简单的解（第 2 节）。</li>
+    </ul>
+    <p>第 3 节再看这种"不完美"能带来多强的组合能力，以及它在哪里失败。</p>
+  </div>
+</section>
+
+<!-- ============ 1 ============ -->
+<section id="s1">
+  <h2><span class="n">1</span>什么时候背，什么时候泛化</h2>
+  <p class="kp"><b>数据越多越难背；同一个模型在训练中先学会泛化、后才开始背，两者之间的窗口随数据量线性变宽。</b></p>
+  <div class="col"><p>判断一张生成图是不是"背"出来的，这些工作大多用同一个<a class="g" href="#g-copy">复制判据</a>：它到最近一张训练图的距离，不到第二近那张的 1/3，就算复制。</p></div>
+
+  <h3 id="s1-1">数据量：从背到泛化的转变</h3>
+
+  <article class="pp t0" id="p-kadkhodaie">
+    <h4>Generalization in diffusion models arises from geometry-adaptive harmonic representations</h4>
+    <p class="pm">Kadkhodaie、Guth、Simoncelli、Mallat，ICLR 2024 口头报告、杰出论文奖，<a href="https://arxiv.org/abs/2310.02557">arXiv 2310.02557</a></p>
+    <div class="pr"><span>实验</span><p>CelebA 人脸 80×80，训练集大小 N 从 1 到 10⁵；去噪网络是不带偏置项的 UNet（约 760 万参数）。关键实验：把数据分成两个不重叠的子集，各训一个模型，再用同样的噪声去采样。</p></div>
+    <div class="pr"><span>结论</span><ul>
+      <li>N = 1 或 10：训练集上去噪很好，测试集上很差，两个模型各自复现自己的训练图，这是记忆。</li>
+      <li>N 约 1000：过渡阶段。</li>
+      <li>N = 10⁵：训练集和测试集上去噪一样好；两个从没见过对方数据的模型，用同样的噪声生成几乎相同的新图，而且这些图不在任何一个训练集里。</li>
+      <li>需要多少数据，取决于网络结构、图像尺寸和数据本身。</li>
+    </ul></div>
+    <div class="pr pk"><span>一句话</span><p>数据够多时，模型学到的是分布，不是样本。作者把原因归于网络偏好在"沿图像轮廓自适应的谐波基"上做收缩。</p></div>
+  </article>
+
+  <article class="pp t0" id="p-zhang">
+    <h4>The Emergence of Reproducibility and Consistency in Diffusion Models</h4>
+    <p class="pm">Zhang 等（通讯作者 Qing Qu），ICML 2024，<a href="https://arxiv.org/abs/2310.05264">arXiv 2310.05264</a></p>
+    <div class="pr"><span>实验</span><p>在 CIFAR-10 上训练 7 类结构、训练方式各不相同的扩散模型，用同样的噪声加确定性采样器生成，统计<a class="g" href="#g-sscd">SSCD</a> 相似度超过 0.6 的图像对占多少（可复现分数）；再把训练集大小从 2⁶ 变到 2¹⁵。</p></div>
+    <div class="pr"><span>结论</span><ul>
+      <li>不同模型生成的图高度一致：差别最大的两类模型之间，可复现分数也约 0.7；Stable Diffusion v1.3 和 v1.4 之间是 0.63。</li>
+      <li>训练集小（记忆区）时可复现，训练集大（泛化区）时也可复现，中间有一段明显的下降，像一个相变。</li>
+    </ul></div>
+    <div class="pr pk"><span>一句话</span><p>"从噪声到图"的对应关系主要由数据决定，而不是由具体网络决定，和上一篇"两个子集训出几乎相同的模型"互相印证。</p></div>
+  </article>
+
+  <article class="pp t0" id="p-gu">
+    <h4>On Memorization in Diffusion Models</h4>
+    <p class="pm">Gu 等，TMLR 2025，<a href="https://arxiv.org/abs/2310.02664">arXiv 2310.02664</a></p>
+    <div class="pr"><span>实验</span><p>CIFAR-10 32×32，EDM 配置，训练延长到 4 万个 epoch。定义<a class="g" href="#g-emm">有效记忆容量</a>（EMM）：训练集小于它时，90% 以上的生成样本是复制。然后逐个改变数据、模型、训练、条件等因素，看 EMM 怎么变。</p></div>
+    <div class="pr"><span>结论</span><ul>
+      <li><b>分辨率</b>：32×32 时 EMM 约 1000；16×16 超过 4000；8×8 约 8000。图越小越容易背。</li>
+      <li><b>模型宽度</b>：加宽 4 倍，EMM 升到约 5000，越宽越容易背；深度的影响不单调。</li>
+      <li><b>weight decay</b>：设为 0.1 时，1000 张图上的复制比例降到 1.33%；EMA、batch size 影响很小。</li>
+      <li><b>条件</b>：给每张图一个随机的类别标签，即使在完整的 CIFAR-10 上，复制比例也超过 65%；不加条件时是 0%。</li>
+    </ul></div>
+    <div class="pr pk"><span>一句话</span><p>模型越大、图越小、条件越"细"，越容易背。条件细到每张图一个，等于把训练集拆成很多个只有一张图的小数据集。</p></div>
+  </article>
+
+  <h3 id="s1-2">训练时间：先泛化，后记忆</h3>
+
+  <article class="pp t0" id="p-bonnaire">
+    <h4>Why Diffusion Models Don't Memorize: The Role of Implicit Dynamical Regularization in Training</h4>
+    <p class="pm">Bonnaire、Urfin、Biroli、Mézard，NeurIPS 2025 口头报告、最佳论文奖，<a href="https://arxiv.org/abs/2505.17638">arXiv 2505.17638</a></p>
+    <div class="pr"><span>实验</span><p>CelebA 灰度 32×32，训练集 n 从 128 到 32768；DDPM 的 U-Net，宽度 W 从 8 到 64（约 26 万到 1600 万参数）；多数设置训练 200 万步以上，n = 32768 时 1100 万步。用 <a class="g" href="#g-fid">FID</a> 衡量生成质量，用复制比例衡量记忆；另用<a class="g" href="#g-rf">随机特征模型</a>做理论分析。</p></div>
+    <div class="pr"><span>结论</span><ul>
+      <li><b>两个时刻</b>：τ<sub>gen</sub>（FID 降到最低）约 10 万步，和 n 无关；τ<sub>mem</sub>（开始复制）和 n 成正比，不同数据量的曲线在 τ / n ≈ 300 处重合。</li>
+      <li>两者都和模型宽度成反比：τ<sub>gen</sub> ∝ 1/W，τ<sub>mem</sub> ∝ n/W。</li>
+      <li>每步用全部数据（全批次）训练，也得到 τ<sub>mem</sub> ∝ n，说明这不是"数据被重复看了多少遍"造成的。换成 Adam，两段都提前，但形态相同。</li>
+      <li>n 超过一个和模型大小有关的阈值后，在研究的训练长度内不再出现记忆；在随机特征理论里，这个阈值等于参数量。</li>
+    </ul></div>
+    <div class="pr pk"><span>一句话</span><p>训练本身带着一种隐式的正则：学会泛化要的步数固定，学会背要的步数随数据量增长，所以<a class="g" href="#g-early">早停</a>就能避开记忆。</p></div>
+  </article>
+
+  <figure class="plate" aria-labelledby="bnT">
+    <p class="plate-t" id="bnT">两个时刻：拖动数据量，看"可泛化窗口"怎么变</p>
+    <div class="controls">
+      <label>训练集大小 n <input type="range" id="bnN" min="7" max="17" step="1" value="10"><output id="bnNV"></output></label>
+      <span>模型宽度</span><span class="chips" id="bnW"></span>
+    </div>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--plus)"></i>生成质量（越高越好，曲线形状为示意）</span>
+      <span><i class="sw" style="background:var(--minus)"></i>复制比例（曲线形状为示意）</span>
+      <span><i class="sw" style="background:var(--guess);opacity:.5"></i>可泛化窗口</span>
+    </div>
+    <div id="bnSvg"></div>
+    <div class="readout" id="bnOut"></div>
+    <p class="cap">两个时刻按论文报告的标度关系画：τ<sub>gen</sub> ≈ 10 万步 ÷ 宽度倍数，τ<sub>mem</sub> ≈ 300 × n ÷ 宽度倍数（CelebA 灰度 32×32、默认宽度）。论文实验的 n 在 128 到 32768 之间，超出部分是按同一关系外推的。</p>
+  </figure>
+
+  <div class="pair">
+    <div class="col">
+      <p>拖到 n = 128 时，τ<sub>mem</sub> 约 3.8 万步，比 τ<sub>gen</sub> 还早：还没学好就开始背。n = 32768 时，τ<sub>mem</sub> 约 1000 万步，窗口宽到近百倍。改变宽度，两个时刻一起平移，窗口的比例不变。</p>
+      <p>推断：大模型的训练集动辄上亿张，τ<sub>mem</sub> 远超训练能走的步数，这可以解释大模型为什么很少整体复制训练图；但训练集里被大量重复的图片，对它来说相当于很小的 n，仍可能被背下来。</p>
+    </div>
+    <p class="note">学会泛化的步数是固定的，学会背的步数跟着数据量走。</p>
+  </div>
+
+  <h3 id="s1-3">2026 年的新进展</h3>
+  <div class="col"><p>下面两篇是 2026 年的预印本，还没有经过同行评审。</p></div>
+
+  <article class="pp t0" id="p-marion">
+    <h4>Understanding diffusion models requires rethinking (again) generalization<span class="pre">预印本</span></h4>
+    <p class="pm">Marion、Wu，2026 年 5 月，立场论文，<a href="https://arxiv.org/abs/2605.06077">arXiv 2605.06077</a></p>
+    <div class="pr"><span>实验</span><p>CIFAR-10，N 从 2048 到 16384；带类别条件的 rectified flow U-Net，300 万到 2 亿参数。</p></div>
+    <div class="pr"><span>结论</span><ul>
+      <li>开始记忆的时间和 N 成正比，与 Bonnaire 等一致。</li>
+      <li>更大的模型更早开始记忆，但能达到的最好质量也更高。</li>
+      <li>FID 等指标随训练出现"双下降"；现有指标都分不清"新颖"和"逼真"。</li>
+    </ul></div>
+    <div class="pr pk"><span>一句话</span><p>用 FID 判断"是否泛化"并不可靠，这也是对 τ<sub>gen</sub> 定义方式的质疑。</p></div>
+  </article>
+
+  <article class="pp t0" id="p-latourelle">
+    <h4>Generalization, memorization, and overfitting for diffusion models trained in the lazy high-dimensional regime<span class="pre">预印本</span></h4>
+    <p class="pm">Latourelle-Vigeant 等（通讯作者 Misiakiewicz），2026 年 8 月，<a href="https://arxiv.org/abs/2608.23938">arXiv 2608.23938</a></p>
+    <div class="pr"><span>实验</span><p>纯理论：<a class="g" href="#g-rf">核模型</a>，样本数 n 和维度 d 同一量级的"惰性"区间。</p></div>
+    <div class="pr"><span>结论</span><ul>
+      <li>最好的停止时间约为 d。</li>
+      <li>继续训练到 d<sup>1+Θ(1)</sup>：训练 loss 降到 0，但还没开始复制，是"过拟合但没有记忆"；这段过拟合是有害的，生成质量变差。</li>
+      <li>训练得更久，样本才坍缩到训练集上。</li>
+    </ul></div>
+    <div class="pr pk"><span>一句话</span><p>在"泛化"和"记忆"之间，还有第三个区：过拟合但没记忆，而且不是无害的。</p></div>
+  </article>
+</section>
+
+<!-- ============ 2 ============ -->
+<section id="s2">
+  <h2><span class="n">2</span>网络偏向什么样的解</h2>
+  <p class="kp"><b>训练好的网络在噪声很大和很小时都接近"只会背"的最优解，分歧集中在中等噪声段。在这一段，它的行为能被两类简单模型解释相当大一部分：只看局部的"补丁拼贴"，以及只用数据均值和协方差的"线性高斯"去噪器。</b></p>
+  <div class="col"><p>为什么是中等噪声：噪声很大时，所有去噪器都只能猜"平均图"（配套页第 10 节）；噪声很小时，眼前的图几乎就是答案。真正"做决定"的是中间这一段，配套页的图片演示里，后验也正是在这一段从糊图收缩到一只猫。</p></div>
+
+  <h3 id="s2-1">局部拼贴</h3>
+
+  <article class="pp t1" id="p-kamb">
+    <h4>An analytic theory of creativity in convolutional diffusion models</h4>
+    <p class="pm">Kamb、Ganguli，ICML 2025 口头报告，<a href="https://arxiv.org/abs/2412.20292">arXiv 2412.20292</a></p>
+    <div class="pr"><span>实验</span><p>写出两个能直接计算的去噪器。<b>LS 机器</b>：每个像素只看周围 P×P 的小块（<a class="g" href="#g-rfield">感受野</a>），只和训练图同一位置的小块比较。<b>ELS 机器</b>：再加上<a class="g" href="#g-equiv">平移等变</a>，可以和训练图任意位置的小块比较。唯一需要校准的是小块大小 P(t)，采样后期缩到 3×3。拿它们去预测训练好的卷积网络（8 层 ResNet、UNet）在 MNIST、FashionMNIST、CIFAR-10、CelebA 上的输出，逐像素算 <a class="g" href="#g-r2">r²</a>。</p></div>
+    <div class="pr"><span>结论</span><ul>
+      <li>ResNet：ELS 的 r² 中位数 0.94–0.96；只会背的最优去噪器只有 0.42–0.68。</li>
+      <li>UNet：约 0.85–0.93。CelebA 上 UNet 更符合 LS（0.90），作者认为是<a class="g" href="#g-pad">零填充</a>让网络能推断绝对位置。</li>
+      <li>带自注意力的 UNet（CIFAR-10）：ELS 0.77，最优去噪器 0.48。作者的说法是，注意力"从补丁拼贴里雕出一个语义上连贯的物体"。</li>
+      <li>局限：只针对卷积网络；P(t) 要从训练好的网络上拟合，不能事先预测。</li>
+    </ul></div>
+    <div class="pr pk"><span>一句话</span><p>局部性加平移等变：每一小块都从训练图里找相似的小块，不同位置可以来自不同的图，拼出数量呈指数级、局部处处合理的新图。</p></div>
+  </article>
+
+  <article class="pp t1" id="p-niedoba">
+    <h4>Towards a Mechanistic Explanation of Diffusion Model Generalization</h4>
+    <p class="pm">Niedoba 等（通讯作者 Frank Wood），ICML 2025 spotlight，<a href="https://arxiv.org/abs/2411.19339">arXiv 2411.19339</a></p>
+    <div class="pr"><span>实验</span><p>把 NCSN++、DDPM++、DiT、U-ViT 四种网络和经验最优去噪器逐个噪声水平比较；提出不需要训练的"补丁去噪器"（PSPC），用每个小块的后验均值拼出整张图。</p></div>
+    <div class="pr"><span>结论</span><ul>
+      <li>所有网络在噪声很大和很小时都贴近最优去噪器，在中等噪声段（EDM 的 σ 约 0.3 到 10）偏离，而且偏离的方式很相似。</li>
+      <li>局部性在所有架构里都有，包括没有卷积的 DiT；DDPM++ 中，梯度集中的区域随噪声变小，从 13×13 缩到 3×3。</li>
+      <li>和网络生成的图相比，PSPC 生成的图最相似（SSCD 0.55），最优去噪器和高斯去噪器都是 0.34，闭式扩散模型 0.23。</li>
+    </ul></div>
+    <div class="pr pk"><span>一句话</span><p>局部偏置不是卷积独有的，Transformer 也有。</p></div>
+  </article>
+
+  <h3 id="s2-2">局部性从哪来：一个没解决的争议</h3>
+
+  <article class="pp t1" id="p-lukoianov">
+    <h4>Locality in Image Diffusion Models Emerges from Data Statistics</h4>
+    <p class="pm">Lukoianov 等（通讯作者 Vincent Sitzmann），NeurIPS 2025，<a href="https://arxiv.org/abs/2509.09672">arXiv 2509.09672</a></p>
+    <div class="pr"><span>实验</span><p>从最优线性去噪器出发：它是由数据协方差决定的 <a class="g" href="#g-wiener">Wiener 滤波器</a>。噪声越大，只有信噪比高的<a class="g" href="#g-pca">主成分</a>能通过，滤波器自然就变得局部。再在 CIFAR-10 训练图上叠加一个"W"形图案，看训练好的 U-Net 的敏感区域会不会跟着变。</p></div>
+    <div class="pr"><span>结论</span><ul>
+      <li>训练好的 U-Net，敏感区域真的出现了 W 形：局部性的形状跟着数据走。</li>
+      <li>预测无注意力的 DDPM U-Net 的输出，r² 分别是：他们的数据驱动模型 0.589 / 0.902 / 0.491（CIFAR-10 / CelebA-HQ / MNIST）；Kamb &amp; Ganguli 的模型 0.303 / 0.831 / 0.402；同一网络换个随机种子重训，作为上限参考，0.852 / 0.981 / 0.969。</li>
+      <li>加入平移等变"并不改善"预测。</li>
+    </ul></div>
+    <div class="pr pk"><span>一句话</span><p>局部性主要来自数据里像素之间的相关性；网络的作用是学到数据里本来就有的局部模式。</p></div>
+  </article>
+
+  <div class="dis">
+    <h4>两篇论文的分歧在哪</h4>
+    <ul>
+      <li><b>Kamb &amp; Ganguli</b>：局部性和平移等变来自卷积结构，等变带来"跨位置拼贴"。<b>Lukoianov 等</b>：局部性来自数据协方差，等变没有帮助。</li>
+      <li>两边的 r² 不能直接比较：参考网络和评测协议都不同。Kamb &amp; Ganguli 的模型在自己的设置下对 CIFAR-10 的 UNet 约 0.90，放到 Lukoianov 的设置下是 0.303。</li>
+      <li>旁证：Niedoba 等发现 DiT 也局部，支持"不全是卷积的功劳"，但没有回答原因；Wang &amp; Pehlevan（下文）发现卷积确实改变了"先学什么、后学什么"，说明结构也在起作用。</li>
+      <li>目前较稳妥的说法：数据统计和网络结构都有贡献，各占多少还没定论。</li>
+    </ul>
+  </div>
+
+  <h3 id="s2-3">线性高斯结构，以及"先粗后细"</h3>
+
+  <article class="pp t1" id="p-li">
+    <h4>Understanding Generalizability of Diffusion Models Requires Rethinking the Hidden Gaussian Structure</h4>
+    <p class="pm">Li、Dai、Qu，NeurIPS 2024，<a href="https://arxiv.org/abs/2410.24060">arXiv 2410.24060</a></p>
+    <div class="pr"><span>实验</span><p>EDM 模型，主要在 FFHQ 上，训练集从 68 到 70000 张。在每个噪声水平，给训练好的网络拟合一个线性映射，再和"只用训练集均值和协方差"的最优高斯去噪器比较。</p></div>
+    <div class="pr"><span>结论</span><ul>
+      <li>模型从记忆走向泛化时，去噪器越来越线性，拟合出的线性去噪器和最优高斯去噪器非常接近。</li>
+      <li>模型相对数据越小，这种现象越明显；大模型在 1094 张图上训练时，会先经过高斯去噪器附近，再走向记忆。</li>
+      <li>在中等噪声段，网络仍明显是非线性的。</li>
+    </ul></div>
+    <div class="pr pk"><span>一句话</span><p>泛化的模型首先学到的是数据的均值和协方差，这是对泛化的"一阶近似"；剩下的非线性部分，正是补丁拼贴类模型要解释的。</p></div>
+  </article>
+
+  <article class="pp t1" id="p-wang">
+    <h4>An Analytical Theory of Spectral Bias in the Learning Dynamics of Diffusion Models</h4>
+    <p class="pm">Wang、Pehlevan，NeurIPS 2025 spotlight，<a href="https://arxiv.org/abs/2503.03206">arXiv 2503.03206</a></p>
+    <div class="pr"><span>实验</span><p>解析推导线性模型和深层 MLP 去噪器的训练过程，再用卷积 U-Net 对照。</p></div>
+    <div class="pr"><span>结论</span><ul>
+      <li>每个数据主成分被学会的时间和它的方差成反比：方差大的粗结构（轮廓、整体明暗）先学会，细节要晚几个数量级。</li>
+      <li>卷积 U-Net 不一样：很多模式几乎同时被学会。局部卷积带来了另一种偏置。</li>
+    </ul></div>
+    <div class="pr pk"><span>一句话</span><p>训练早期，模型自然偏向"粗结构对、细节平滑"的解。推断：这和第 1 节"先泛化后记忆"是同一件事的两面。</p></div>
+  </article>
+
+  <h3 id="s2-4">平滑，以及训练目标里的噪声</h3>
+
+  <article class="pp t1" id="p-scarvelis">
+    <h4>Closed-Form Diffusion Models</h4>
+    <p class="pm">Scarvelis、Borde、Solomon，TMLR 2025，<a href="https://arxiv.org/abs/2310.12395">arXiv 2310.12395</a></p>
+    <div class="pr"><span>实验</span><p>不训练网络，直接把经验最优 score 做显式平滑，再用它采样。</p></div>
+    <div class="pr"><span>结论</span><ul>
+      <li>不平滑时只会背；平滑后，样本落到若干训练点的加权平均（<a class="g" href="#g-convex">重心</a>）上，成为新样本。</li>
+      <li>Butterflies 数据集上 <a class="g" href="#g-fid">KID</a> 0.0114，优于 DDPM 的 0.0220；笔记本 CPU 上每张 0.41 秒。</li>
+    </ul></div>
+    <div class="pr pk"><span>一句话</span><p>显式平滑就能带来新颖性，但新样本只是训练点的凸组合。</p></div>
+  </article>
+
+  <article class="pp t1" id="p-farghly">
+    <h4>Diffusion Models and the Manifold Hypothesis: Log-Domain Smoothing is Geometry Adaptive</h4>
+    <p class="pm">Farghly 等（通讯作者 Jakiw Pidstrigach），NeurIPS 2025，<a href="https://arxiv.org/abs/2510.02305">arXiv 2510.02305</a></p>
+    <div class="pr"><span>实验</span><p>理论分析加小规模实验，没有分析训练好的大网络。</p></div>
+    <div class="pr"><span>结论</span><ul>
+      <li>平滑 score，等价于平滑对数密度；这种平滑会沿着数据<a class="g" href="#g-manifold">流形</a>进行。直接平滑密度（核密度估计）则会把样本推离流形。</li>
+      <li>选什么样的平滑核，决定了模型沿哪个流形泛化。</li>
+    </ul></div>
+    <div class="pr pk"><span>一句话</span><p>"在 score 上做平滑"天然是贴着数据形状的，这解释了为什么不完美的 score 仍能生成合理的样本。</p></div>
+  </article>
+
+  <article class="pp t1" id="p-vastola">
+    <h4>Generalization through variance: how noise shapes inductive biases in diffusion models</h4>
+    <p class="pm">Vastola，ICLR 2025，<a href="https://arxiv.org/abs/2504.12532">arXiv 2504.12532</a></p>
+    <div class="pr"><span>实验</span><p>用路径积分分析线性特征模型和宽网络，只做了玩具实验。</p></div>
+    <div class="pr"><span>结论</span><p>训练时用的目标（带噪声的 score）只在平均意义上等于真实 score，它的方差在数据稀疏的地方更大；结果是学到的分布等于"训练分布把空隙填上"。文中列出了六个因素：带噪的目标、前向过程、score 的非线性依赖、容量、特征、训练集结构。</p></div>
+    <div class="pr pk"><span>一句话</span><p>目标本身的随机性，是泛化的来源之一。</p></div>
+  </article>
+
+  <article class="pp t1" id="p-bertrand">
+    <h4>On the Closed-Form of Flow Matching: Generalization Does Not Arise from Target Stochasticity</h4>
+    <p class="pm">Bertrand 等（通讯作者 Rémi Emonet），NeurIPS 2025 口头报告，<a href="https://arxiv.org/abs/2506.03719">arXiv 2506.03719</a></p>
+    <div class="pr"><span>实验</span><p>在高维图像上，对比 flow matching 的"带噪目标"和"精确的闭式目标"。</p></div>
+    <div class="pr"><span>结论</span><p>高维时两种目标几乎等价；直接用精确目标训练，图像质量相近，甚至更好。</p></div>
+    <div class="pr pk"><span>一句话</span><p>泛化不来自目标里的随机性。和 Vastola 的结论方向相反，但两者适用范围不同（低维理论对高维实验），不是直接的反驳。</p></div>
+  </article>
+</section>
+
+<!-- ============ 3 ============ -->
+<section id="s3">
+  <h2><span class="n">3</span>组合泛化</h2>
+  <p class="kp"><b>模型能画出训练里没见过的概念组合，但这种能力约等于各单项能力相乘，出现得很突然；它依赖概念能在位置或条件上分开。真实的文生图模型里，位置关系、属性绑定、计数至今是最常失败的地方。</b></p>
+
+  <h3 id="s3-1">合成任务里的组合</h3>
+
+  <article class="pp t2" id="p-okawa">
+    <h4>Compositional Abilities Emerge Multiplicatively: Exploring Diffusion Models on a Synthetic Task</h4>
+    <p class="pm">Okawa、Lubana、Dick、Tanaka，NeurIPS 2023，<a href="https://arxiv.org/abs/2310.09336">arXiv 2310.09336</a></p>
+    <div class="pr"><span>实验</span><p>条件 U-Net 扩散模型，每张图一个物体，由三个二值概念决定：形状（圆、三角）× 颜色（红、蓝）× 大小（大、小）。只用 4 种组合训练（5000 张），测试没见过的组合，按"和训练组合差几个属性"分成距离 1 和 2。准确率是三个概念各自<a class="g" href="#g-probe">线性探针</a>概率的乘积。</p></div>
+    <div class="pr"><span>结论</span><ul>
+      <li>学习顺序：先学会训练组合，再学会距离 1 的组合，距离 2 的组合突然出现。</li>
+      <li>"乘积"准确率是突跳的，"平均"准确率却是平滑的，这就是"涌现"看起来突然的原因。</li>
+      <li>没见过的组合需要更多样本；训练组合彼此不相邻时，模型会学错（比如把 010、011 都画成三角形）。</li>
+    </ul></div>
+    <div class="pr pk"><span>一句话</span><p>组合成功率约等于各单项能力相乘，所以看起来是突然出现的；它还取决于训练数据里概念是怎么分布的。</p></div>
+  </article>
+
+  <article class="pp t2" id="p-park">
+    <h4>Emergence of Hidden Capabilities: Exploring Learning Dynamics in Concept Space</h4>
+    <p class="pm">Park、Okawa、Lee、Tanaka、Lubana，NeurIPS 2024 spotlight，<a href="https://arxiv.org/abs/2406.19370">arXiv 2406.19370</a></p>
+    <div class="pr"><span>实验</span><p>生成 32×32 圆形的扩散模型，用大红、大蓝、小红三种训练，测试没见过的小蓝。"概念信号"指一个概念的取值变化时，图像变化有多大。</p></div>
+    <div class="pr"><span>结论</span><ul>
+      <li>概念信号决定了概念被学会的快慢和先后。</li>
+      <li>普通提示下，5 次运行里有的在约 8000 步达到约 100%，有的失败；改用在条件向量上加概念方向，或"夸张提示"（比如把颜色从 (0.4, 0.4, 0.6) 改成 (0.3, 0.3, 0.7)），约 6000 步就稳定生成正确结果。</li>
+      <li>这个时间点对应学习轨迹上的一个突然转向；<a class="g" href="#g-cfg">无分类器引导</a>只在转向之后才有帮助。</li>
+    </ul></div>
+    <div class="pr pk"><span>一句话</span><p>模型可能早就具备了某个组合能力，只是普通提示还调不出来。</p></div>
+  </article>
+
+  <article class="pp t2" id="p-liang">
+    <h4>How Diffusion Models Learn to Factorize and Compose</h4>
+    <p class="pm">Liang 等（通讯作者 Ila Fiete），NeurIPS 2024，<a href="https://arxiv.org/abs/2408.13256">arXiv 2408.13256</a></p>
+    <div class="pr"><span>实验</span><p>条件扩散模型生成二维高斯光斑或条纹叠加的图，按 x、y 位置做条件，留出一部分区域不训练。</p></div>
+    <div class="pr"><span>结论</span><ul>
+      <li>学到的表示是"分解的"（x 和 y 分开），但不完全连续：能组合已有的特征，却补不出没见过的取值。</li>
+      <li>只训练一维条纹时学不会组合；二维光斑加一维条纹一起训练，留出区域的准确率最高约 70%，即使光斑只保留 20% 也差不多。</li>
+      <li>加入一维条纹后，达到 60% 准确率需要的数据随图像尺寸线性增长，不加时是二次增长。</li>
+    </ul></div>
+    <div class="pr pk"><span>一句话</span><p>数据里有"单独展示每个因素"的样本，组合会便宜得多。</p></div>
+  </article>
+
+  <article class="pp t2" id="p-yang">
+    <h4>Swing-by Dynamics in Concept Learning and Compositional Generalization</h4>
+    <p class="pm">Yang 等（通讯作者 Hidenori Tanaka），ICLR 2025，<a href="https://arxiv.org/abs/2410.08309">arXiv 2410.08309</a></p>
+    <div class="pr"><span>实验</span><p>把上面的现象抽象成一个可解析的简化任务（在结构化的高斯混合上学恒等映射），用两层网络分析，再回到文本条件扩散模型验证。</p></div>
+    <div class="pr"><span>结论</span><p>复现了"按概念层级泛化"和"学习快慢由概念信号决定"；并预测，训练早期没见过组合的测试 loss 会先降后升、再降，反复几次（swing-by）。</p></div>
+    <div class="pr pk"><span>一句话</span><p>组合能力的出现不是单调的，中途看起来"变差"不一定是坏事。</p></div>
+  </article>
+
+  <h3 id="s3-2">组合靠什么机制</h3>
+
+  <article class="pp t2" id="p-bradley">
+    <h4>Mechanisms of Projective Composition of Diffusion Models</h4>
+    <p class="pm">Bradley、Nakkiran（共同一作）等，ICML 2025，<a href="https://arxiv.org/abs/2502.04549">arXiv 2502.04549</a></p>
+    <div class="pr"><span>实验</span><p>定义"投影式组合"：组合后的分布，在每个概念自己负责的那部分上，要和这个概念的分布一致。组合方式是把各概念的 score 相对一个"背景"分布叠加。在 CLEVR（三维几何体场景）上做按位置条件的生成，人工数 100 张样本。</p></div>
+    <div class="pr"><span>结论</span><ul>
+      <li>当各概念作用在互不重叠的像素区域上、并且背景分布也能这样分开时（Factorized Conditionals），叠加 score 一定能得到正确的组合。</li>
+      <li>背景选对很关键：以空场景为背景、要求 6 个物体，97/100 全部正确；以"无条件模型"为背景、用单物体模型组合 4 个物体，77/100 一个都不对；换成用 1–5 个物体的杂乱场景训练，98/100 正确。</li>
+    </ul></div>
+    <div class="pr pk"><span>一句话</span><p>score 相加能组合，前提是各概念作用在可以分开的坐标上，而且背景选对。</p></div>
+  </article>
+
+  <article class="pp t2" id="p-bradley2">
+    <h4>Local Mechanisms of Compositional Generalization in Conditional Diffusion</h4>
+    <p class="pm">Bradley（独立作者），ICML 2026，<a href="https://arxiv.org/abs/2509.16447">arXiv 2509.16447</a></p>
+    <div class="pr"><span>实验</span><p>CLEVR，EDM2 U-Net，分别用 1、1–3、1–5 个物体的图训练；用一个 ResNet-18 计数器（准确率 99.74%），测模型能稳定生成的最多物体数 Kmax。</p></div>
+    <div class="pr"><span>结论</span><ul>
+      <li>证明了"条件下的投影式组合"和"局部条件 score"等价：每个输出像素只依赖附近的像素和它自己那部分条件。</li>
+      <li>用 1–3 个物体训练：条件里标出所有物体的位置，Kmax = 7；只标一个物体，Kmax = 2；列表式条件，Kmax = 3；在网络结构上强制局部，Kmax = 9。</li>
+      <li>SDXL 在像素空间里有空间局部性，但"每个条件只管自己那块"的局部性基本没有，只在学到的特征空间里出现。</li>
+    </ul></div>
+    <div class="pr pk"><span>一句话</span><p>组合泛化和第 2 节的局部性是同一个机制：条件也得"局部"，才能拼出比训练时更多的物体。</p></div>
+  </article>
+
+  <article class="pp t2" id="p-favero">
+    <h4>How Compositional Generalization and Creativity Improve as Diffusion Models are Trained</h4>
+    <p class="pm">Favero 等（通讯作者 Matthieu Wyart），ICML 2025，<a href="https://arxiv.org/abs/2502.12089">arXiv 2502.12089</a></p>
+    <div class="pr"><span>实验</span><p>用层级语法生成的数据（低层规则组成高层规则）训练扩散模型，理论加实验。</p></div>
+    <div class="pr"><span>结论</span><p>学会第 ℓ 层规则约需要 m<sup>ℓ+1</sup> 个样本，是多项式而不是随维度指数增长；低层规则先学会，高层规则后学会。</p></div>
+    <div class="pr pk"><span>一句话</span><p>只要数据有层级结构，组合出新样本所需的数据量远小于"把所有组合都见一遍"。</p></div>
+  </article>
+
+  <h3 id="s3-3">真实文生图模型的短板</h3>
+  <article class="pp t2" id="p-geneval">
+    <h4>GenEval: An Object-Focused Framework for Evaluating Text-to-Image Alignment</h4>
+    <p class="pm">Ghosh、Hajishirzi、Schmidt，NeurIPS 2023 数据集与基准赛道，<a href="https://arxiv.org/abs/2310.11513">arXiv 2310.11513</a></p>
+    <div class="pr"><span>实验</span><p>553 条提示，分 6 类任务，用物体检测器和颜色分类器自动打分。</p></div>
+    <div class="pr pk"><span>一句话</span><p>单个物体基本解决了；位置关系最差，其次是属性绑定，再次是计数。IF-XL 倾向于把第一个物体放在左边，SD 2.1 常把两个物体的颜色互换。</p></div>
+  </article>
+  <figure class="plate" aria-labelledby="geT">
+    <p class="plate-t" id="geT">GenEval 各类任务得分（满分 1）</p>
+    <div class="legend" id="geLeg"></div>
+    <div id="geSvg"></div>
+    <p class="cap">SD-XL、IF-XL 的分数来自 GenEval 论文表 2；SD3 是其论文（<a href="https://arxiv.org/abs/2403.03206">2403.03206</a>）表 5 中最大配置、经过 DPO 的结果。</p>
+  </figure>
+</section>
+
+<!-- ============ 4 ============ -->
+<section id="s4">
+  <h2><span class="n">4</span>拼成一张图：共识与争议</h2>
+  <p class="kp"><b>"完美拟合只会背"和"训练先泛化后记忆"已基本是共识；网络在中等噪声段学成了"局部拼贴 + 线性高斯"也有较多证据，但局部性的来源、以及怎么衡量"泛化"，仍是开放问题。</b></p>
+  <table class="t" aria-label="共识与争议">
+    <thead><tr><th style="width:20%">问题</th><th>目前的回答</th><th style="width:22%">代表工作</th><th style="width:10%">程度</th></tr></thead>
+    <tbody>
+      <tr><td>完美拟合会怎样</td><td>只会背；用精确经验 score 要避免坍缩，数据量需随维度指数增长</td><td><a href="#p-biroli">Biroli 2024</a></td><td class="cons">共识</td></tr>
+      <tr><td>网络为什么没背</td><td>泛化所需步数固定，记忆所需步数随数据量线性增长；数据够多时训练内不会背</td><td><a href="#p-bonnaire">Bonnaire 2025</a>、<a href="#p-kadkhodaie">Kadkhodaie 2024</a></td><td class="cons">较强共识</td></tr>
+      <tr><td>泛化和记忆之间还有什么</td><td>理论预测存在"过拟合但没记忆"的中间区，而且有害</td><td><a href="#p-latourelle">Latourelle-Vigeant 2026</a></td><td class="cons">新提出</td></tr>
+      <tr><td>网络学成了什么</td><td>中等噪声段偏离最优解；局部拼贴和线性高斯能解释大部分，注意力负责整体一致</td><td><a href="#p-kamb">Kamb 2025</a>、<a href="#p-niedoba">Niedoba 2025</a>、<a href="#p-li">Li 2024</a></td><td class="cons">现象共识</td></tr>
+      <tr><td>局部性从哪来</td><td>网络结构，还是数据里像素的相关性</td><td><a href="#p-kamb">Kamb 2025</a> 对 <a href="#p-lukoianov">Lukoianov 2025</a></td><td class="cons">争议</td></tr>
+      <tr><td>训练目标里的噪声重要吗</td><td>高维实验显示不重要</td><td><a href="#p-bertrand">Bertrand 2025</a> 对 <a href="#p-vastola">Vastola 2025</a></td><td class="cons">偏向"不重要"</td></tr>
+      <tr><td>组合能力从哪来</td><td>单项能力相乘；需要概念和条件都能局部地分开；数据里有单独展示各因素的样本会更便宜</td><td><a href="#p-okawa">Okawa 2023</a>、<a href="#p-bradley2">Bradley 2026</a>、<a href="#p-liang">Liang 2024</a></td><td class="cons">较强共识</td></tr>
+      <tr><td>怎么衡量"泛化"</td><td>FID 分不清新颖和逼真；常用最近邻距离比、SSCD 判断复制，但还没有公认的"新颖度"指标</td><td><a href="#p-marion">Marion 2026</a></td><td class="cons">开放问题</td></tr>
+    </tbody>
+  </table>
+  <div class="col">
+    <p>把这些放到一条线上：训练的目标是一个只会背的最优解；训练动态让网络先停在一个"粗结构对、细节平滑"的解附近；网络结构和数据统计让这个解在中等噪声段表现为局部拼贴；注意力把拼贴整合成说得通的整体；同样的局部机制让模型能把概念拼成没见过的组合，但拼得越多、越要求条件也局部，越容易出错。</p>
+  </div>
+</section>
+
+<!-- ============ 5 ============ -->
+<section id="s5">
+  <h2><span class="n">5</span>论文总表</h2>
+  <table class="t tbl-papers" aria-label="论文总表">
+    <thead><tr><th>论文</th><th>一句话</th></tr></thead>
+    <tbody id="ptab"></tbody>
+  </table>
+</section>
+
+<!-- ============ 术语表 ============ -->
+<section id="gloss">
+  <h2><span class="n">·</span>术语表</h2>
+  <dl class="gloss">
+    <div class="gi" id="g-empirical"><dt class="gt">经验最优去噪器</dt><dd class="gd">在给定的有限训练集上，让去噪 MSE 最小的去噪器。它等于"按眼前噪声图来自每张训练图的后验概率，把训练图加权平均"，对应的 score 叫经验 score。用它采样只会还原训练图。</dd></div>
+    <div class="gi" id="g-copy"><dt class="gt">复制判据</dt><dd class="gd">判断生成图是否在"背"：它到最近一张训练图的距离，若小于到第二近那张距离的 1/3，就算复制。多篇工作用这个判据。</dd></div>
+    <div class="gi" id="g-emm"><dt class="gt">有效记忆容量（EMM）</dt><dd class="gd">Gu 等提出：在给定模型和训练设置下，训练集小于这个大小时，90% 以上的生成样本是复制。越大说明越容易背。</dd></div>
+    <div class="gi" id="g-fid"><dt class="gt">FID 与 KID</dt><dd class="gd">用一个预训练图像网络提取特征，比较生成图和真实图的特征分布有多接近，越低越好。KID 是同类指标，在样本少时更稳定。它们衡量"像不像"，分不清"新的"还是"背的"。</dd></div>
+    <div class="gi" id="g-sscd"><dt class="gt">SSCD 相似度</dt><dd class="gd">一种专门用来检测"图片复制"的特征相似度，取值 0 到 1；常以 0.6 作为"足够相似、可能是复制"的门槛。</dd></div>
+    <div class="gi" id="g-r2"><dt class="gt">r²（决定系数）</dt><dd class="gd">一个模型的预测能解释目标变化的多大比例：1 表示完全一致，0 表示和"只猜平均值"一样，可以是负数。这里用来衡量简单模型对网络输出的预测有多准。</dd></div>
+    <div class="gi" id="g-early"><dt class="gt">早停</dt><dd class="gd">在验证指标最好时就停止训练，而不是训练到训练集 loss 最低。在扩散模型里，它对应停在"已泛化、未记忆"的窗口里。</dd></div>
+    <div class="gi" id="g-rf"><dt class="gt">随机特征模型与核模型</dt><dd class="gd">把网络简化成"固定的随机特征 + 只训练最后一层"的模型，或者它在无限宽时的极限（核模型）。可以精确分析，常用来做理论；"惰性区"指网络参数在训练中几乎不动、行为接近核模型的情况。</dd></div>
+    <div class="gi" id="g-rfield"><dt class="gt">感受野</dt><dd class="gd">网络输出的某个像素，受输入图像中哪一片区域影响。卷积网络的感受野是有限的一块。</dd></div>
+    <div class="gi" id="g-equiv"><dt class="gt">平移等变</dt><dd class="gd">输入整体平移，输出也跟着同样平移。卷积用同一套权重处理每个位置，所以天然平移等变；这让网络可以把训练图任意位置的小块用到新图的任意位置。</dd></div>
+    <div class="gi" id="g-pad">
+      <dt class="gt">零填充</dt><dd class="gd">卷积在图像边缘补 0 再计算。边缘附近补的 0 让网络能"感觉到"自己离边界多远，从而推断出绝对位置，部分打破平移等变。</dd></div>
+    <div class="gi" id="g-pca"><dt class="gt">协方差与主成分</dt><dd class="gd">协方差描述数据各维度一起变化的方式；它的特征向量叫主成分，对应的特征值是数据沿这个方向的方差。图像里方差大的主成分通常是大尺度结构，方差小的是细节。</dd></div>
+    <div class="gi" id="g-wiener"><dt class="gt">Wiener 滤波器</dt><dd class="gd">只用数据均值和协方差、让 MSE 最小的线性去噪器。它按每个主成分的信噪比决定保留多少，也就是"最优高斯去噪器"。</dd></div>
+    <div class="gi" id="g-convex"><dt class="gt">重心与凸组合</dt><dd class="gd">若干点按非负、总和为 1 的权重加权平均，得到的点叫它们的凸组合，也叫加权重心。它总在这些点"之间"，不会跑出它们围成的范围。</dd></div>
+    <div class="gi" id="g-manifold"><dt class="gt">流形</dt><dd class="gd">高维空间里一片弯曲的低维"曲面"。"流形假设"认为真实图片集中在这样一片曲面上；沿着曲面移动得到的仍是合理的图，离开曲面就不像图了。</dd></div>
+    <div class="gi" id="g-probe"><dt class="gt">线性探针</dt><dd class="gd">在生成的图（或模型的中间特征）上训练一个简单的线性分类器，看某个概念能否被读出来，用来衡量这个概念是否被正确生成。</dd></div>
+    <div class="gi" id="g-cfg"><dt class="gt">无分类器引导</dt><dd class="gd">采样时把"有条件"和"无条件"两个预测外推着组合，让结果更贴合条件。引导强度越大，越贴合条件，但多样性越低。</dd></div>
+  </dl>
+</section>
+
+<section id="refs">
+  <h2><span class="n">·</span>说明</h2>
+  <div class="col">
+    <p class="small">所有论文的标题、作者、会议和 arXiv 编号都回原始页面核对过；条目里的数字来自论文正文或表格。两篇标了"预印本"的 2026 年工作尚未经同行评审。标"推断"的句子是整理者的推断，不是论文结论。配套页：<a href="index.html">一步只能得到平均，多步才能得到样本</a>（概率论基础、图片上的一步与多步演示、局部去噪器开关）。</p>
+  </div>
+</section>
+<footer>2026 年 10 月整理。</footer>
+</main>
+
+<script>
+(function(){
+'use strict';
+var $=function(id){return document.getElementById(id);};
+var C={ink:'#17212B',ink2:'#4C5866',muted:'#7E8894',rule:'#D3D9DC',grid:'#E4E8E9',plus:'#1F63B8',minus:'#C2306F',guess:'#D69500',guessInk:'#8F6200',noise:'#9AA5B1'};
+var LANE=[C.plus,C.guessInk,C.minus];
+function attrs(o){var s='';for(var k in o){if(o[k]!=null)s+=' '+k+'="'+o[k]+'"';}return s;}
+function E(t,o,inner){return '<'+t+attrs(o)+(inner==null?'/>':'>'+inner+'</'+t+'>');}
+function txt(x,y,s,o){o=o||{};o.x=x;o.y=y;return E('text',o,s);}
+function svg(w,h,inner){return '<svg viewBox="0 0 '+w+' '+h+'" xmlns="http://www.w3.org/2000/svg">'+inner+'</svg>';}
+function path(p){var s='';for(var i=0;i<p.length;i++)s+=(i?'L':'M')+p[i][0].toFixed(1)+','+p[i][1].toFixed(1);return s;}
+function chips(el,items,cur,on){el.innerHTML='';items.forEach(function(it){var b=document.createElement('button');b.type='button';b.textContent=it[1];b.setAttribute('aria-pressed',String(it[0]===cur));b.addEventListener('click',function(){Array.prototype.forEach.call(el.children,function(c){c.setAttribute('aria-pressed','false');});b.setAttribute('aria-pressed','true');on(it[0]);});el.appendChild(b);});}
+function fmtSteps(v){if(v<1e4)return String(Math.round(v));if(v<1e8){var w=v/1e4;return (w<10?w.toFixed(1).replace(/\.0$/,''):Math.round(w))+' 万';}var y=v/1e8;return (y<10?y.toFixed(1).replace(/\.0$/,''):Math.round(y))+' 亿';}
+
+/* ---------- 论文数据 ---------- */
+// [id, 主题, 年, 月, 图上标签, 级别(2=获奖或口头报告,1=spotlight), 标题, 会议, 一句话]
+var P=[
+ ['kadkhodaie',0,2023,10,'Kadkhodaie',2,'Generalization in diffusion models arises from geometry-adaptive harmonic representations','ICLR 2024，杰出论文奖','数据够多时，两个不重叠子集训出的模型用同一噪声生成几乎相同的新图'],
+ ['gu',0,2023,10,'Gu',0,'On Memorization in Diffusion Models','TMLR 2025','模型越大、图越小、条件越细，越容易背'],
+ ['zhang',0,2023,10,'Zhang',0,'The Emergence of Reproducibility and Consistency in Diffusion Models','ICML 2024','同一噪声在不同模型上生成几乎相同的图，记忆区和泛化区都如此'],
+ ['biroli',0,2024,2,'Biroli',0,'Dynamical regimes of diffusion models','Nature Communications 2024','精确经验 score 必然坍缩到训练图；要避免坍缩，数据量需随维度指数增长'],
+ ['bonnaire',0,2025,5,'Bonnaire',2,'Why Diffusion Models Don\'t Memorize','NeurIPS 2025，最佳论文奖','泛化所需步数固定，记忆所需步数与数据量成正比，早停即可避开记忆'],
+ ['marion',0,2026,5,'Marion',0,'Understanding diffusion models requires rethinking (again) generalization','预印本，2026','大模型更早记忆；FID 分不清新颖与逼真'],
+ ['latourelle',0,2026,8,'Latourelle-Vigeant',0,'Generalization, memorization, and overfitting … lazy high-dimensional regime','预印本，2026','泛化和记忆之间，存在有害的"过拟合但没记忆"区'],
+ ['scarvelis',1,2023,10,'Scarvelis',0,'Closed-Form Diffusion Models','TMLR 2025','平滑经验 score 就能生成新样本，但只是训练点的凸组合'],
+ ['li',1,2024,10,'Li',0,'Understanding Generalizability … Hidden Gaussian Structure','NeurIPS 2024','泛化的去噪器接近只用均值和协方差的最优高斯去噪器'],
+ ['niedoba',1,2024,11,'Niedoba',1,'Towards a Mechanistic Explanation of Diffusion Model Generalization','ICML 2025，spotlight','包括 DiT 在内的网络都局部，并在中等噪声段一致地偏离最优解'],
+ ['kamb',1,2024,12,'Kamb',2,'An analytic theory of creativity in convolutional diffusion models','ICML 2025，口头报告','局部性加平移等变的补丁拼贴模型，能预测卷积扩散模型的输出（r² 约 0.95）'],
+ ['wang',1,2025,3,'Wang',1,'An Analytical Theory of Spectral Bias in the Learning Dynamics of Diffusion Models','NeurIPS 2025，spotlight','方差大的粗结构先学会，细节晚几个数量级；卷积改变这个顺序'],
+ ['vastola',1,2025,4,'Vastola',0,'Generalization through variance','ICLR 2025','训练目标的方差把训练分布的空隙填上'],
+ ['bertrand',1,2025,6,'Bertrand',2,'On the Closed-Form of Flow Matching','NeurIPS 2025，口头报告','高维时泛化不来自训练目标里的随机性'],
+ ['lukoianov',1,2025,9,'Lukoianov',0,'Locality in Image Diffusion Models Emerges from Data Statistics','NeurIPS 2025','局部性来自数据协方差，平移等变没有帮助'],
+ ['farghly',1,2025,10,'Farghly',0,'Log-Domain Smoothing is Geometry Adaptive','NeurIPS 2025','平滑 score 等于平滑对数密度，会沿数据流形进行'],
+ ['okawa',2,2023,10,'Okawa',0,'Compositional Abilities Emerge Multiplicatively','NeurIPS 2023','组合成功率约等于各单项能力相乘，所以看起来突然出现'],
+ ['geneval',2,2023,10,'GenEval',0,'GenEval: An Object-Focused Framework for Evaluating Text-to-Image Alignment','NeurIPS 2023，数据集与基准','位置、属性绑定、计数是文生图模型最常失败的类别'],
+ ['park',2,2024,6,'Park',1,'Emergence of Hidden Capabilities','NeurIPS 2024，spotlight','能力出现得比普通提示能调出来的时间更早'],
+ ['liang',2,2024,8,'Liang',0,'How Diffusion Models Learn to Factorize and Compose','NeurIPS 2024','表示可分解但不连续；单因素样本让组合所需数据从二次降到线性'],
+ ['yang',2,2024,10,'Yang',0,'Swing-by Dynamics in Concept Learning and Compositional Generalization','ICLR 2025','没见过组合的测试 loss 会反复起伏'],
+ ['bradley',2,2025,2,'Bradley',0,'Mechanisms of Projective Composition of Diffusion Models','ICML 2025','概念作用在可分开的坐标上、背景选对时，score 相加能实现组合'],
+ ['favero',2,2025,2,'Favero',0,'How Compositional Generalization and Creativity Improve as Diffusion Models are Trained','ICML 2025','数据有层级结构时，组合所需样本是多项式而非指数级'],
+ ['bradley2',2,2025,9,'Bradley（局部）',0,'Local Mechanisms of Compositional Generalization in Conditional Diffusion','ICML 2026','组合泛化等价于局部的条件 score；强制局部可多生成 3 倍物体']
+];
+var LANENAME=['何时背、何时泛化','网络偏向什么解','组合泛化'];
+
+/* ---------- 研究地图 ---------- */
+(function timeline(){
+  var el=$('tlSvg');if(!el)return;
+  var W=960,H=360,X0=158,PX=21,LY=[110,210,310],AX=334,s='',seen={};
+  function mx(y,m){return (y-2023)*12+(m-10);}
+  [[2024,1],[2025,1],[2026,1]].forEach(function(t){var x=X0+mx(t[0],t[1])*PX;s+=E('line',{x1:x,x2:x,y1:24,y2:AX,stroke:C.grid});s+=txt(x+4,AX+18,t[0]+' 年',{'font-size':12,fill:C.ink2});});
+  s+=E('line',{x1:X0-12,x2:W-20,y1:AX,y2:AX,stroke:C.rule});
+  LY.forEach(function(y,i){s+=E('line',{x1:X0-12,x2:W-20,y1:y,y2:y,stroke:C.rule,'stroke-dasharray':'2 4'});s+=txt(10,y+5,LANENAME[i],{'font-size':13.5,'font-weight':700,fill:LANE[i]});});
+  P.forEach(function(p){
+    var key=p[1]+'_'+p[2]+'_'+p[3],k=seen[key]||0;seen[key]=k+1;
+    var x=X0+mx(p[2],p[3])*PX+k*18,y=LY[p[1]],col=LANE[p[1]],g='';
+    if(p[5]>0)g+=E('circle',{cx:x,cy:y,r:10.5,fill:'none',stroke:col,'stroke-width':p[5]===2?2.2:1.2,'stroke-dasharray':p[5]===1?'3 2':null});
+    g+=E('circle',{class:'dot',cx:x,cy:y,r:6,fill:col});
+    g+=txt(x+4,y-13,p[4],{'font-size':12,fill:C.ink2,transform:'rotate(-58 '+(x+4)+' '+(y-13)+')'});
+    g+=E('title',null,p[6]+'（'+p[7]+'）');
+    s+=E('a',{href:'#p-'+p[0],'aria-label':p[4]+'：'+p[6]},g);
+  });
+  el.innerHTML=svg(W,H,s);
+})();
+
+/* ---------- 论文总表 ---------- */
+(function table(){
+  var tb=$('ptab');if(!tb)return;var h='';
+  [0,1,2].forEach(function(l){
+    h+='<tr><td colspan="2" style="font-family:var(--serif);font-weight:700;color:'+LANE[l]+';padding-top:16px">'+LANENAME[l]+'</td></tr>';
+    P.filter(function(p){return p[1]===l;}).forEach(function(p){
+      h+='<tr><td><a href="#p-'+p[0]+'">'+p[6]+'</a><span class="pm2">'+p[7]+'</span></td><td>'+p[8]+'</td></tr>';
+    });
+  });
+  tb.innerHTML=h;
+})();
+
+/* ---------- 两个时刻 ---------- */
+(function bonnaire(){
+  if(!$('bnSvg'))return;
+  var n=1024,w=1,W=760,H=270,x0=56,x1=740,top=34,base=212;
+  function lx(v){return x0+(Math.log10(v)-3)/(8-3)*(x1-x0);}
+  function Y(v){return base-v*(base-top);}
+  function sig(z){return 1/(1+Math.exp(-z));}
+  function draw(){
+    var tg=1e5/w,tm=300*n/w,s='',i;
+    var a=lx(Math.max(1e3,Math.min(tg,tm)));
+    s+=E('rect',{x:x0,y:top,width:Math.max(0,a-x0),height:base-top,fill:'#F4F6F7'});
+    if(tm>tg){s+=E('rect',{x:lx(tg),y:top,width:Math.max(0,Math.min(x1,lx(tm))-lx(tg)),height:base-top,fill:'rgba(214,149,0,.16)'});}
+    if(lx(tm)<x1)s+=E('rect',{x:lx(Math.min(tm,1e8)),y:top,width:Math.max(0,x1-lx(Math.min(tm,1e8))),height:base-top,fill:'rgba(194,48,111,.08)'});
+    s+=E('line',{x1:x0,x2:x1,y1:base,y2:base,stroke:C.rule});
+    [[1e3,'1 千'],[1e4,'1 万'],[1e5,'10 万'],[1e6,'100 万'],[1e7,'1000 万'],[1e8,'1 亿']].forEach(function(t){s+=E('line',{x1:lx(t[0]),x2:lx(t[0]),y1:base,y2:base+5,stroke:C.muted});s+=txt(lx(t[0]),base+19,t[1],{'font-size':12,fill:C.ink2,'text-anchor':'middle'});});
+    s+=txt(x1,base+38,'训练步数（对数刻度）→',{'font-size':12,fill:C.ink2,'text-anchor':'end'});
+    var x2=lx(2e6);s+=E('line',{x1:x2,x2:x2,y1:top,y2:base,stroke:C.muted,'stroke-dasharray':'2 3'});
+    s+=txt(x2+4,base-6,'论文多数设置训练 ≥ 200 万步',{'font-size':11,fill:C.muted});
+    var q=[],m=[];
+    for(i=0;i<=300;i++){var lv=3+5*i/300,v=Math.pow(10,lv);q.push([lx(v),Y(0.92*sig((lv-Math.log10(tg)+0.45)/0.16))]);m.push([lx(v),Y(0.85*sig((lv-Math.log10(tm)-0.45)/0.14))]);}
+    s+=E('path',{d:path(q),fill:'none',stroke:C.plus,'stroke-width':2.4});
+    s+=E('path',{d:path(m),fill:'none',stroke:C.minus,'stroke-width':2.4});
+    function vline(v,col,label,up){var x=lx(v);if(x<x0||x>x1)return;s+=E('line',{x1:x,x2:x,y1:top-4,y2:base,stroke:col,'stroke-width':1.6});var right=x<x1-150;s+=txt(x+(right?6:-6),up?top+10:top+28,label,{'font-size':12.5,'font-weight':700,fill:col,'text-anchor':right?'start':'end',stroke:'#fff','stroke-width':3,'paint-order':'stroke'});}
+    vline(tg,C.plus,'τ<tspan dy="3" font-size="9">gen</tspan><tspan dy="-3"> ≈ '+fmtSteps(tg)+' 步</tspan>',true);
+    vline(tm,C.minus,'τ<tspan dy="3" font-size="9">mem</tspan><tspan dy="-3"> ≈ '+fmtSteps(tm)+' 步</tspan>',false);
+    if(tm>tg){var cx=(lx(tg)+Math.min(x1,lx(tm)))/2;if(Math.min(x1,lx(tm))-lx(tg)>90)s+=txt(cx,base-30,'可泛化窗口',{'font-size':13,'font-weight':700,fill:C.guessInk,'text-anchor':'middle'});}
+    else s+=txt((lx(tm)+x1)/2,base-30,'还没泛化好就开始背',{'font-size':13,'font-weight':700,fill:C.minus,'text-anchor':'middle'});
+    $('bnSvg').innerHTML=svg(W,H,s);
+    var ratio=tm/tg,out='n = <b>'+n+'</b>　τ<sub>gen</sub> ≈ <b>'+fmtSteps(tg)+'</b> 步　τ<sub>mem</sub> ≈ <b>'+fmtSteps(tm)+'</b> 步　';
+    out+=ratio>1?'可泛化窗口：τ<sub>mem</sub> 是 τ<sub>gen</sub> 的 <b>'+(ratio<10?ratio.toFixed(1):Math.round(ratio))+'</b> 倍':'τ<sub>mem</sub> 早于 τ<sub>gen</sub>：还没学好就开始背';
+    if(n>32768)out+='<br>超出论文实验范围（n 为 128 到 32768），按同一关系外推。';
+    $('bnOut').innerHTML=out;$('bnNV').textContent=n;
+  }
+  $('bnN').addEventListener('input',function(e){n=Math.pow(2,+e.target.value);draw();});
+  chips($('bnW'),[[0.5,'窄一半'],[1,'默认'],[2,'宽一倍']],w,function(v){w=v;draw();});
+  draw();
+})();
+
+/* ---------- GenEval ---------- */
+(function geneval(){
+  if(!$('geSvg'))return;
+  var cats=['单个物体','两个物体','计数','颜色','位置','属性绑定','总分'];
+  var M=[['SD-XL',C.noise,[.98,.74,.39,.85,.15,.23,.55]],['IF-XL',C.plus,[.97,.74,.66,.81,.13,.35,.61]],['SD3（最大配置，DPO 后）',C.guess,[.99,.94,.72,.89,.33,.60,.74]]];
+  var W=760,LX=96,BW=600,BH=11,GAP=3,BLOCK=M.length*(BH+GAP)+14,top=8,H=top+cats.length*BLOCK+24,s='';
+  $('geLeg').innerHTML=M.map(function(m){return '<span><i class="sw" style="background:'+m[1]+'"></i>'+m[0]+'</span>';}).join('');
+  [0.25,0.5,0.75,1].forEach(function(v){var x=LX+v*BW;s+=E('line',{x1:x,x2:x,y1:top,y2:H-22,stroke:C.grid});s+=txt(x,H-6,v.toFixed(2).replace(/0$/,''),{'font-size':11,fill:C.muted,'text-anchor':'middle'});});
+  cats.forEach(function(c,ci){
+    var y0=top+ci*BLOCK,weak=(c==='位置'||c==='属性绑定'||c==='计数');
+    s+=txt(LX-10,y0+BLOCK/2,c,{'font-size':13.5,'font-weight':weak||c==='总分'?700:400,fill:weak?C.minus:C.ink,'text-anchor':'end'});
+    M.forEach(function(m,mi){var v=m[2][ci],y=y0+mi*(BH+GAP);s+=E('rect',{x:LX,y:y,width:v*BW,height:BH,rx:2,fill:m[1]});s+=txt(LX+v*BW+5,y+BH-1,v.toFixed(2),{'font-size':11,fill:C.ink2});});
+  });
+  $('geSvg').innerHTML=svg(W,H,s);
+})();
+
+/* ---------- 术语悬浮释义 ---------- */
+(function gloss(){
+  var pop=document.createElement('div');pop.id='gpop';pop.setAttribute('role','tooltip');document.body.appendChild(pop);
+  var hideT=null,cur=null;
+  function show(a){
+    var id=(a.getAttribute('href')||'').slice(1),d=document.getElementById(id);if(!d)return;
+    var dt=d.querySelector('.gt'),dd=d.querySelector('.gd');if(!dt||!dd)return;
+    pop.innerHTML='<span class="gh">'+dt.innerHTML+'</span>'+dd.innerHTML;pop.classList.add('on');cur=a;
+    var r=a.getBoundingClientRect(),pw=pop.offsetWidth,ph=pop.offsetHeight,sx=window.pageXOffset,sy=window.pageYOffset,vw=document.documentElement.clientWidth;
+    var left=Math.min(Math.max(8,r.left+sx),sx+vw-pw-8),topY=r.bottom+sy+6;
+    if(r.bottom+ph+12>window.innerHeight&&r.top-ph-8>0)topY=r.top+sy-ph-6;
+    pop.style.left=left+'px';pop.style.top=topY+'px';
+  }
+  function hideSoon(){clearTimeout(hideT);hideT=setTimeout(function(){pop.classList.remove('on');cur=null;},160);}
+  function find(e){var n=e.target;while(n&&n!==document){if(n.tagName==='A'&&n.classList&&n.classList.contains('g')&&!pop.contains(n))return n;n=n.parentNode;}return null;}
+  document.addEventListener('mouseover',function(e){var a=find(e);if(a){clearTimeout(hideT);if(a!==cur)show(a);}});
+  document.addEventListener('mouseout',function(e){if(find(e))hideSoon();});
+  document.addEventListener('focusin',function(e){var a=find(e);if(a){clearTimeout(hideT);show(a);}});
+  document.addEventListener('focusout',function(e){if(find(e))hideSoon();});
+  pop.addEventListener('mouseenter',function(){clearTimeout(hideT);});
+  pop.addEventListener('mouseleave',hideSoon);
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'){pop.classList.remove('on');cur=null;}});
+})();
+})();
+
+</script>
+</body>
+</html>

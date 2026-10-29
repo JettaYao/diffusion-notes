@@ -1,0 +1,1594 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>一步只能得到平均，多步才能得到样本：从概率论讲起</title>
+<meta name="description" content="上篇把概率分布、条件分布、贝叶斯公式、似然、最大似然、交叉熵、KL 等概念讲清楚；下篇用它们解释扩散和 flow matching 为什么一步只能生成平均、多步才能得到样本。全篇只用一个例子：数据只有 +1 和 −1。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="一步只能得到平均，多步才能得到样本：从概率论讲起">
+<meta property="og:description" content="先讲清概率分布、贝叶斯公式、似然、交叉熵、KL；再用它们解释扩散和 flow matching 为什么一步只能生成平均、多步才能得到样本。全部可交互。">
+<meta name="theme-color" content="#F0F2F1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2317212B'/%3E%3Cpath d='M5 16 C12 16 14 7 27 7' stroke='%231F63B8' stroke-width='3' fill='none'/%3E%3Cpath d='M5 16 C12 16 14 25 27 25' stroke='%23C2306F' stroke-width='3' fill='none'/%3E%3Ccircle cx='5' cy='16' r='3' fill='%23D69500'/%3E%3C/svg%3E">
+<style>
+:root{
+  color-scheme: light;
+  --paper:#F0F2F1; --plate:#FFFFFF; --wash:#E6EAE9;
+  --ink:#17212B; --ink-2:#4C5866; --muted:#7E8894; --rule:#D3D9DC; --grid:#E4E8E9;
+  --plus:#1F63B8;   --plus-w:rgba(31,99,184,.12);
+  --minus:#C2306F;  --minus-w:rgba(194,48,111,.12);
+  --mean:#9B8E7E;   --mean-w:rgba(155,142,126,.18);
+  --guess:#D69500;  --guess-ink:#8F6200; --guess-w:rgba(214,149,0,.14);
+  --noise:#9AA5B1;
+  --serif:"Songti SC","Noto Serif SC","Source Han Serif SC","STSong","SimSun",serif;
+  --sans:"PingFang SC","Noto Sans SC","Hiragino Sans GB","Microsoft YaHei",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --kai:"Kaiti SC","STKaiti","KaiTi","BiauKai","AR PL UKai CN","Songti SC",serif;
+  --math:"STIX Two Text","Times New Roman","Songti SC",serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font:16.5px/1.85 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--plus);text-underline-offset:3px}
+:focus-visible{outline:2px solid var(--guess);outline-offset:2px}
+h1,h2,h3{font-family:var(--serif);font-weight:700;color:var(--ink)}
+p{margin:12px 0}
+b,strong{font-weight:650}
+sub{font-size:.72em;line-height:0}
+.m{font-family:var(--math);font-size:1.07em;white-space:nowrap}
+.m i{font-style:italic}
+
+/* page frame */
+.wrap{max-width:1120px;margin:0 auto;padding:0 32px}
+.hero{padding:64px 0 10px}
+.hero h1{font-size:58px;line-height:1.13;letter-spacing:.02em;margin:0 0 22px}
+.lede{font-family:var(--serif);font-size:20px;line-height:1.8;max-width:34em;margin:0 0 28px;color:var(--ink)}
+.toc{margin:30px 0 0;padding:16px 0 0;border-top:1px solid var(--rule);display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:4px 28px;font-size:14.5px}
+.toc a{color:var(--ink-2);text-decoration:none;display:flex;gap:10px}
+.toc a:hover{color:var(--ink)}
+.toc a span{font-family:var(--serif);font-weight:700;color:var(--ink);min-width:1.2em}
+
+section{padding-top:56px}
+h2{font-size:31px;line-height:1.3;margin:0 0 6px;display:flex;gap:18px;align-items:baseline}
+h2 .n{font-size:40px;line-height:1;color:var(--guess)}
+h3{font-size:22px;line-height:1.45;margin:44px 0 6px}
+.col{max-width:690px}
+.pair{display:grid;grid-template-columns:minmax(0,690px) 270px;column-gap:48px;align-items:start}
+.pair>.col>p:first-child{margin-top:0}
+.note{font-family:var(--kai);font-size:17px;line-height:1.7;color:var(--guess-ink);border-top:2px solid var(--guess);padding-top:8px;margin-top:6px}
+.note b{font-weight:700}
+.eq{font-family:var(--math);font-size:20px;line-height:1.6;margin:14px 0;padding:4px 0 4px 26px;color:var(--ink)}
+.eq i{font-style:italic}
+.eq .cm{font-family:var(--sans);font-size:14px;color:var(--muted);margin-left:14px}
+.claim{font-family:var(--serif);font-size:19.5px;line-height:1.75;margin:22px 0;padding:14px 0 14px 22px;border-left:4px solid var(--ink);max-width:690px}
+.small{font-size:14px;color:var(--ink-2);line-height:1.75}
+ul.plain{margin:10px 0;padding-left:22px}
+ul.plain li{margin:6px 0}
+.deep{background:var(--wash);border-radius:6px;padding:6px 26px 14px;margin:28px 0 0;max-width:744px}
+.deep h3{margin-top:22px}
+
+/* plates (figures) */
+.plate{background:var(--plate);border:1px solid var(--rule);border-radius:8px;padding:20px 22px 18px;margin:26px 0}
+.plate-t{font-family:var(--serif);font-weight:700;font-size:17px;margin:0 0 4px}
+.plate-s{font-size:14px;color:var(--ink-2);margin:0 0 10px;line-height:1.7}
+.cap{font-size:13.5px;color:var(--ink-2);line-height:1.75;margin:10px 0 0}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px 22px;font-size:14px;color:var(--ink-2);margin:6px 0 10px}
+.controls label{display:inline-flex;align-items:center;gap:8px}
+.controls output{font-variant-numeric:tabular-nums;color:var(--ink);min-width:3.2em;display:inline-block}
+input[type=range]{accent-color:var(--ink);width:170px}
+.chips{display:inline-flex;gap:6px;flex-wrap:wrap}
+.chips button{font:inherit;font-size:14px;border:1px solid var(--rule);background:var(--plate);color:var(--ink-2);border-radius:999px;padding:3px 13px;cursor:pointer}
+.chips button:hover{border-color:var(--ink-2)}
+.chips button[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn{font:inherit;font-size:14px;border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:6px;padding:3px 14px;cursor:pointer}
+.legend{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:13px;color:var(--ink-2)}
+.legend>span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:14px;height:4px;border-radius:2px;display:inline-block}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.kai-live{font-family:var(--kai);font-size:18px;color:var(--guess-ink);min-height:1.7em}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 28px;margin:14px 0 0}
+.stat{border-top:1px solid var(--rule);padding-top:8px}
+.stat .v{font-family:var(--serif);font-size:30px;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums}
+.stat .k{font-size:13px;color:var(--ink-2)}
+.readout{font-size:14px;color:var(--ink-2);background:var(--wash);border-radius:6px;padding:8px 12px;margin:10px 0 0;font-variant-numeric:tabular-nums;line-height:1.8}
+.readout b{color:var(--ink)}
+.twin{display:grid;grid-template-columns:1.15fr 1fr;gap:22px}
+.panel-t{font-size:13.5px;color:var(--ink-2);margin:0 0 2px}
+.pbar{display:flex;height:22px;border-radius:4px;overflow:hidden;margin:6px 0 0;font-size:12.5px;color:#fff;font-variant-numeric:tabular-nums}
+.pbar div{display:flex;align-items:center;padding:0 8px;white-space:nowrap;overflow:hidden;transition:width .12s linear}
+canvas{display:block}
+svg{display:block;width:100%;height:auto}
+svg text{font-family:var(--sans)}
+
+/* flow diagram in section 0 */
+.flow{display:grid;grid-template-columns:64px 1fr;gap:14px 16px;align-items:center;margin:20px 0;max-width:900px}
+.flow .lab{font-family:var(--serif);font-weight:700;font-size:17px}
+.flow .row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:14.5px}
+.flow .bx{border:1px solid var(--rule);background:var(--plate);border-radius:5px;padding:4px 11px;white-space:nowrap}
+.flow .bx.net{border-color:var(--ink);font-weight:600}
+.flow .bx.out-m{background:var(--mean-w);border-color:var(--mean)}
+.flow .bx.out-s{background:var(--plus-w);border-color:var(--plus)}
+.flow .ar{color:var(--muted)}
+.flow .res{font-family:var(--kai);font-size:16.5px;color:var(--guess-ink);margin-left:6px}
+
+/* targets */
+.targets{display:grid;grid-template-columns:1fr 1fr;gap:0;margin:20px 0;max-width:900px;border:1px solid var(--rule);border-radius:8px;overflow:hidden;background:var(--plate)}
+.targets>div{padding:16px 20px}
+.targets>div+div{border-left:1px solid var(--rule)}
+.targets h4{font-family:var(--serif);font-size:18px;margin:0 0 6px}
+.targets p{margin:0;font-size:15px;line-height:1.75;color:var(--ink-2)}
+.targets .verdict{margin-top:10px;font-family:var(--kai);font-size:17px;color:var(--ink)}
+
+/* cats */
+.catgrid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:22px;align-items:start}
+.thumbs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.thumbs canvas{width:100%;height:auto;border-radius:4px;transition:opacity .2s}
+.thumbs canvas.off{opacity:.22}
+.avgbox canvas{width:100%;height:auto;border-radius:4px;border:1px solid var(--rule)}
+.avgbox .panel-t{margin-bottom:6px}
+
+/* tables */
+table.t{border-collapse:collapse;width:100%;font-size:14.5px;margin:12px 0;max-width:900px}
+.t th,.t td{border-bottom:1px solid var(--grid);padding:7px 10px;text-align:left;vertical-align:top}
+.t th{font-weight:600;font-size:13.5px;color:var(--ink-2);border-bottom:1px solid var(--rule)}
+.t td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.final{font-family:var(--serif);font-size:27px;line-height:1.65;max-width:30em;margin:18px 0 0}
+.refs{font-size:14px;color:var(--ink-2);padding-left:20px}
+.refs li{margin:5px 0}
+footer{color:var(--muted);font-size:13px;padding:44px 0 50px;max-width:690px}
+
+@media (max-width:1100px){
+  .pair{grid-template-columns:1fr}
+  .note{max-width:690px;margin:4px 0 8px}
+}
+@media (max-width:820px){
+  .wrap{padding:0 18px}
+  .hero{padding-top:40px}
+  .hero h1{font-size:40px}
+  .lede{font-size:18px}
+  h2{font-size:25px}
+  h2 .n{font-size:32px}
+  .twin,.catgrid,.targets{grid-template-columns:1fr}
+  .avgbox{max-width:360px}
+  .targets>div+div{border-left:0;border-top:1px solid var(--rule)}
+  .stats{grid-template-columns:1fr 1fr 1fr;gap:0 12px}
+  .stat .v{font-size:23px}
+  .plate{padding:16px 14px}
+  .flow{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}.pbar div,.thumbs canvas{transition:none}}
+ol.plain{margin:10px 0;padding-left:22px}
+ol.plain li{margin:6px 0}
+
+/* ---- 新增 ---- */
+.imgstrip{display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));gap:6px}
+.imc canvas{display:block;width:100%;height:auto;image-rendering:pixelated;border-radius:3px;border:1px solid var(--rule)}
+.imc .lb{font-size:11.5px;line-height:1.45;color:var(--ink-2);text-align:center;margin-top:3px;font-variant-numeric:tabular-nums}
+.imc.guess canvas{border-color:var(--guess)}
+.imc.out canvas{border:2px solid var(--guess-ink)}
+.rowlab{font-size:13.5px;color:var(--ink-2);margin:10px 0 5px}
+.imrow{display:grid;grid-template-columns:52px repeat(6,minmax(0,1fr));gap:6px;align-items:center;margin:0 0 6px}
+.imrow .rl{font-size:13px;color:var(--ink);font-weight:600}
+
+.kp{font-family:var(--serif);font-size:20px;line-height:1.75;margin:14px 0 18px;padding:12px 0 12px 20px;border-left:4px solid var(--guess);max-width:720px;color:var(--ink)}
+.kp b{font-weight:700}
+.half{margin:72px 0 0;padding:26px 0 18px;border-top:3px solid var(--ink);display:flex;gap:22px;align-items:baseline;flex-wrap:wrap}
+.half .hl{font-family:var(--serif);font-weight:700;font-size:36px;line-height:1.2}
+.half .hs{font-size:15.5px;color:var(--ink-2);max-width:40em}
+a.g{color:inherit;text-decoration:underline dotted;text-decoration-color:var(--muted);text-underline-offset:4px;cursor:help}
+a.g:hover,a.g:focus-visible{color:var(--plus);text-decoration-color:var(--plus)}
+#gpop{position:absolute;z-index:60;max-width:360px;background:#fff;border:1px solid var(--rule);border-radius:8px;box-shadow:0 8px 28px rgba(23,33,43,.14);padding:10px 13px 11px;font-size:13.5px;line-height:1.72;color:var(--ink-2);opacity:0;visibility:hidden;transition:opacity .12s}
+#gpop.on{opacity:1;visibility:visible}
+#gpop .gh{display:block;color:var(--ink);font-family:var(--serif);font-weight:700;font-size:15.5px;margin-bottom:3px}
+#gpop a.g{pointer-events:none;text-decoration:none}
+table.sym{border-collapse:collapse;font-size:14.5px;margin:6px 0 0;width:100%;max-width:820px}
+.sym td{padding:6px 10px;border-bottom:1px solid var(--grid);vertical-align:top}
+.sym td:first-child{font-family:var(--math);font-size:16.5px;white-space:nowrap;width:120px;color:var(--ink)}
+.symbox{background:var(--plate);border:1px solid var(--rule);border-radius:8px;padding:14px 20px 12px;margin:22px 0 0}
+.symbox .plate-t{margin-bottom:2px}
+dl.gloss{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:0 36px;margin:16px 0 0}
+.gi{padding:12px 0 10px;border-top:1px solid var(--rule);scroll-margin-top:16px}
+.gi dt{font-family:var(--serif);font-weight:700;font-size:16.5px;color:var(--ink)}
+.gi dd{margin:3px 0 0;font-size:14.5px;line-height:1.78;color:var(--ink-2)}
+.gi:target{background:var(--guess-w);box-shadow:-10px 0 0 var(--guess-w),10px 0 0 var(--guess-w)}
+.gsec{font-family:var(--serif);font-size:18px;font-weight:700;margin:30px 0 0;color:var(--ink-2)}
+.toc2{margin:30px 0 0;padding:16px 0 0;border-top:1px solid var(--rule);display:grid;grid-template-columns:1fr 1fr;gap:6px 40px;font-size:14.5px}
+.toc2 .tg{font-family:var(--serif);font-weight:700;color:var(--ink);margin-bottom:4px}
+.toc2 a{color:var(--ink-2);text-decoration:none;display:flex;gap:10px;padding:2px 0}
+.toc2 a:hover{color:var(--ink)}
+.toc2 a span{font-family:var(--serif);font-weight:700;color:var(--ink);min-width:1.6em}
+.bx2{display:inline-block;border:1px solid var(--rule);border-radius:5px;padding:1px 9px;background:var(--plate)}
+.stack3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 28px;margin:12px 0 0}
+@media (max-width:820px){
+  .toc2{grid-template-columns:1fr}
+  .half .hl{font-size:28px}
+  .kp{font-size:18px}
+  .stack3{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<header class="wrap hero">
+  <h1>一步只能得到平均，<br>多步才能得到样本</h1>
+  <p class="lede">扩散和 flow matching 的网络，每一步学到的都是"条件均值"。只用一次，得到的是所有训练数据的平均；接力用几十次，得到的是一个具体的样本。上篇把这里用到的概率论一个个讲清楚，下篇用它们解释这件事。全篇只用一个例子：训练数据只有 +1 和 −1 两个点。</p>
+
+  <figure class="plate" style="margin-top:6px" aria-labelledby="heroT">
+    <p class="plate-t" id="heroT">数据只有 +1 和 −1。左边是噪声，右边是采样结果</p>
+    <div id="heroBox"><canvas id="heroCv" role="img" aria-label="两点数据上的 N 步采样轨迹与结果分布"></canvas></div>
+    <div class="controls" style="margin-top:10px">
+      <span>采样步数</span>
+      <span class="chips" id="heroChips"></span>
+      <span class="legend">
+        <span><i class="dot" style="background:var(--plus)"></i>落到 +1</span>
+        <span><i class="dot" style="background:var(--minus)"></i>落到 −1</span>
+        <span><i class="dot" style="background:var(--mean)"></i>卡在两峰之间</span>
+      </span>
+    </div>
+    <div class="kai-live" id="heroSay"></div>
+    <div class="stats">
+      <div class="stat"><div class="v" id="hsA">–</div><div class="k">输出的平均 |x₀|</div></div>
+      <div class="stat"><div class="v" id="hsB">–</div><div class="k">落在 ±1 附近（|x₀| &gt; 0.95）</div></div>
+      <div class="stat"><div class="v" id="hsC">–</div><div class="k">落在两峰之间（|x₀| &lt; 0.5）</div></div>
+    </div>
+    <p class="cap">每条线是一次采样：从左边的噪声出发，用<a class="g" href="#g-euler">欧拉法</a>走 N 步。网络本该学到的<a class="g" href="#g-condexp">条件均值</a>在这个例子里能精确算出来，所以这里没有神经网络，误差只来自步数。统计用 20000 个按分位数均匀取的噪声。</p>
+  </figure>
+
+  <div class="symbox">
+    <p class="plate-t">全页符号</p>
+    <table class="sym" aria-label="符号表">
+      <tr><td>x₀</td><td>干净数据，也就是一条训练样本。本例里只能是 +1 或 −1，各占一半</td></tr>
+      <tr><td>ε</td><td>噪声，服从标准<a class="g" href="#g-gauss">高斯分布</a> N(0, 1)，和 x₀ <a class="g" href="#g-indep">独立</a></td></tr>
+      <tr><td>t</td><td>噪声程度：t = 0 是干净数据，t = 1 是纯噪声</td></tr>
+      <tr><td>x<sub>t</sub></td><td>加噪后的数据：x<sub>t</sub> = (1 − t)·x₀ + t·ε</td></tr>
+      <tr><td>θ</td><td>神经网络的全部权重。只在讲"训练"时出现，全页不指别的东西</td></tr>
+      <tr><td>D(x, t)</td><td>网络在时刻 t 看到 x 时，对 x₀ 的猜测，也就是<a class="g" href="#g-condexp">后验均值</a> E[x₀ | x<sub>t</sub> = x]</td></tr>
+      <tr><td>v(x, t)</td><td>采样时的<a class="g" href="#g-velocity">速度</a>：这一点该往哪走、走多快</td></tr>
+      <tr><td>p(a | b)</td><td>单竖线：b 已知时 a 的概率。右边是已知的，左边是要问的</td></tr>
+      <tr><td>KL(P ‖ Q)</td><td>双竖线只是分隔两个分布，不是条件。前面的分布提供样本，后面的接受检查</td></tr>
+    </table>
+    <p class="small" style="margin:8px 0 0">带虚线下划线的词，鼠标停上去会显示解释；点击跳到页尾的术语表。</p>
+  </div>
+
+  <nav class="toc2" aria-label="目录">
+    <div>
+      <div class="tg">上篇：概率论的零件</div>
+      <a href="#s1"><span>1</span>概率分布</a>
+      <a href="#s2"><span>2</span>联合、条件、边缘</a>
+      <a href="#s3"><span>3</span>贝叶斯公式：先验、似然、后验、证据</a>
+      <a href="#s4"><span>4</span>条件期望：后验的平均</a>
+      <a href="#s5"><span>5</span>模型：分布族与两种参数</a>
+      <a href="#s6"><span>6</span>训练：最大似然与最大后验</a>
+      <a href="#s7"><span>7</span>交叉熵与 KL 散度</a>
+    </div>
+    <div>
+      <div class="tg">下篇：为什么一步只能得到平均</div>
+      <a href="#s8"><span>8</span>扩散的训练在学什么</a>
+      <a href="#s9"><span>9</span>采样：常微分方程与欧拉法</a>
+      <a href="#s10"><span>10</span>一步：只能得到平均</a>
+      <a href="#s11"><span>11</span>多步：为什么最后是样本</a>
+      <a href="#s12"><span>12</span>条件均值不就是目标吗</a>
+      <a href="#s13"><span>13</span>LLM 为什么不用反复重算</a>
+      <a href="#s14"><span>14</span>一句话</a>
+      <a href="#gloss"><span>·</span>术语表</a>
+    </div>
+  </nav>
+</header>
+
+<main class="wrap">
+
+<div class="half"><span class="hl">上篇</span><span class="hs">概率论的零件。每一节第一句是这一节的结论，后面是解释。下篇会用到这里的每一个概念。</span></div>
+
+<!-- ============ 1 ============ -->
+<section id="s1">
+  <h2><span class="n">1</span>概率分布</h2>
+  <p class="kp"><b>概率分布回答"每种可能各占多少"，所有可能加起来正好是 100%。</b></p>
+  <div class="col">
+    <p><a class="g" href="#g-rv">随机变量</a>是结果还没确定的量。"从训练集里随手抽一条数据"，抽出来是什么事先不知道，它就是一个随机变量。本例的训练集只有两条数据：+1 和 −1。随手抽一条，记作 x₀，抽到 +1 和 −1 的可能各占 50%。这就是 x₀ 的<a class="g" href="#g-dist">概率分布</a>。</p>
+    <p>分布有两类：</p>
+    <ul class="plain">
+      <li><b>离散</b>：可能的结果能一个个数出来，每个结果直接对应一个概率。x₀ 就是这种。大模型预测下一个 token 也是这种，叫<a class="g" href="#g-cat">类别分布</a>。</li>
+      <li><b>连续</b>：结果可以是任意实数，比如噪声 ε。这时恰好等于某个值的概率是 0，只能问"落在某个区间里的概率"，它等于<a class="g" href="#g-density">概率密度</a>曲线在这个区间下面的面积。密度是"单位长度上的概率"，所以它可以大于 1，只要曲线下的总面积是 1。</li>
+    </ul>
+    <p>描述一个分布最常用的两个数：</p>
+    <ul class="plain">
+      <li><a class="g" href="#g-exp">期望（均值）</a>：每个可能的值乘以它的概率，再加起来。x₀ 的期望是 0.5 × (+1) + 0.5 × (−1) = 0。</li>
+      <li><a class="g" href="#g-var">方差</a>：每个值离均值有多远，取平方后按概率平均；方差开根号叫标准差。x₀ 的方差是 1。</li>
+    </ul>
+    <p><a class="g" href="#g-gauss">高斯分布</a>（也叫正态分布）记作 N(μ, σ²)：一条钟形曲线，μ 是中心，σ 是宽度，也就是标准差。注意括号里第二个位置写的是方差 σ²。噪声 ε 服从 N(0, 1)。</p>
+  </div>
+  <p class="claim">先记住一件事：x₀ 的分布有两个峰（+1 和 −1），它的均值 0 却落在两峰之间，是一个根本不会出现的值。这就是<a class="g" href="#g-mode">多峰分布</a>的均值的问题，也是全页的核心。</p>
+</section>
+
+<!-- ============ 2 ============ -->
+<section id="s2">
+  <h2><span class="n">2</span>联合、条件、边缘</h2>
+  <p class="kp"><b>条件分布就是"只看满足某个条件的那部分情况，再把它们重新凑成 100%"。</b></p>
+  <div class="col">
+    <p>加噪的规则是我们自己定的，不需要学：</p>
+    <p class="eq"><i>x<sub>t</sub></i> = (1 − <i>t</i>) · <i>x</i>₀ + <i>t</i> · <i>ε</i>，&nbsp;<i>ε</i> ~ N(0, 1)，<span class="cm">ε 和 x₀ 独立</span></p>
+    <p>t = 0 时，x<sub>t</sub> 就是 x₀；t = 1 时，x<sub>t</sub> 就是纯噪声 ε；中间是两者按比例混合。</p>
+    <p>同时考虑 x₀ 和 x<sub>t</sub> 两个量，会用到三种分布：</p>
+    <ul class="plain">
+      <li><a class="g" href="#g-joint">联合分布</a> p(x₀, x<sub>t</sub>)：两个量同时取某一组值的可能。</li>
+      <li><a class="g" href="#g-cond">条件分布</a> p(x<sub>t</sub> | x₀)：已知 x₀ 时 x<sub>t</sub> 的分布。已知 x₀ = +1 时，x<sub>t</sub> = (1 − t) + t·ε，也就是 N(1 − t, t²)：以 1 − t 为中心、宽度为 t 的钟形。x₀ = −1 时是以 −(1 − t) 为中心的同样形状。</li>
+      <li><a class="g" href="#g-marg">边缘分布</a> p(x<sub>t</sub>)：不管 x₀ 是多少，x<sub>t</sub> 本身的分布。做法是把两种情况按各自的概率加起来：½·N(1 − t, t²) + ½·N(−(1 − t), t²)。t 小时它是两个分开的峰；t 越大，两个峰越宽、越靠近，最后合成一个。</li>
+    </ul>
+    <p>下篇要反复用到两个事实：</p>
+    <ul class="plain">
+      <li><b>t = 1 时，x<sub>t</sub> = ε，和 x₀ 完全<a class="g" href="#g-indep">独立</a></b>。看到 x₁，对 x₀ 一点信息都没有。</li>
+      <li><a class="g" href="#g-chain">链式法则</a>：p(a, b) = p(a) × p(b | a)。量多时就一路乘下去。它是精确的，不需要任何假设。大模型给一整段文本算概率，就是这样一个 token 一个 token 乘出来的。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 3 ============ -->
+<section id="s3">
+  <h2><span class="n">3</span>贝叶斯公式：先验、似然、后验、证据</h2>
+  <p class="kp"><b>贝叶斯公式把"由因推果"的概率，翻成"由果推因"的概率：后验 = 似然 × 先验 ÷ 证据。</b></p>
+  <div class="col">
+    <p>已知 x₀ 求 x<sub>t</sub> 的分布很容易，规则是我们定的。但去噪要回答的是反方向的问题：看到了 x<sub>t</sub>，x₀ 是 +1 还是 −1？</p>
+    <p><a class="g" href="#g-bayes">贝叶斯公式</a>就是做这个翻转的。它的来历只有一行："x₀ 和 x<sub>t</sub> 同时出现"的可能，可以按两种顺序算，结果必然相等：</p>
+    <p class="eq">p(<i>x</i>₀) × p(<i>x<sub>t</sub></i> | <i>x</i>₀) = p(<i>x<sub>t</sub></i>) × p(<i>x</i>₀ | <i>x<sub>t</sub></i>)</p>
+    <p>两边同除以 p(x<sub>t</sub>)：</p>
+    <p class="eq">p(<i>x</i>₀ | <i>x<sub>t</sub></i>) = p(<i>x<sub>t</sub></i> | <i>x</i>₀) × p(<i>x</i>₀) ÷ p(<i>x<sub>t</sub></i>)</p>
+    <p>这四项各有名字。名字描述的是<b>角色</b>：谁是不知道、要推断的，谁是已经看到的。这里不知道的是 x₀，看到的是 x<sub>t</sub>。</p>
+  </div>
+  <table class="t" aria-label="四个角色">
+    <thead><tr><th style="width:11%">名字</th><th style="width:20%">写法</th><th style="width:34%">本例里是什么</th><th>一句话</th></tr></thead>
+    <tbody>
+      <tr><td><a class="g" href="#g-prior">先验</a></td><td>p(x₀)</td><td>+1、−1 各 50%，也就是数据分布本身</td><td>看到 x<sub>t</sub> 之前，对 x₀ 的判断</td></tr>
+      <tr><td><a class="g" href="#g-lik">似然</a></td><td>p(x<sub>t</sub> | x₀)，固定看到的 x<sub>t</sub></td><td>加噪规则：假如 x₀ 是 +1（或 −1），加噪后恰好得到眼前这个 x<sub>t</sub> 的可能</td><td>每个候选答案对眼前数据的解释力</td></tr>
+      <tr><td><a class="g" href="#g-evid">证据</a></td><td>p(x<sub>t</sub>)</td><td>上一节的边缘分布</td><td>不管 x₀ 是什么，看到这个 x<sub>t</sub> 本身有多常见；它是分母，把后验凑成 100%</td></tr>
+      <tr><td><a class="g" href="#g-post">后验</a></td><td>p(x₀ | x<sub>t</sub>)</td><td>看到 x<sub>t</sub> 之后，x₀ 是 +1 和 −1 的可能各是多少</td><td>看到数据之后的判断</td></tr>
+    </tbody>
+  </table>
+
+  <h3>概率和似然：同一个式子，两种读法</h3>
+  <div class="pair">
+    <div class="col">
+      <p>p(x<sub>t</sub> | x₀) 这同一个式子：</p>
+      <ul class="plain">
+        <li><b>固定 x₀，看 x<sub>t</sub> 取各个值</b>：这是一个概率分布，曲线下的面积是 1。</li>
+        <li><b>固定已经看到的 x<sub>t</sub>，看 x₀ 取各个值</b>：这是<a class="g" href="#g-lik">似然</a>，它给每个候选答案打分。几个分数加起来一般不是 1，只有相对大小有意义。</li>
+      </ul>
+      <p>下图里，蓝线是 x₀ = +1 时 x<sub>t</sub> 的分布，玫红线是 x₀ = −1 时的，黑线是两者的平均，也就是证据 p(x<sub>t</sub>)。拖动 x<sub>t</sub>：竖线和蓝线、玫红线交点的高度，就是两个似然。</p>
+    </div>
+    <p class="note">横着看是概率：一条曲线，面积是 1。竖着看是似然：一根竖线上的几个高度，加起来不是 1。</p>
+  </div>
+
+  <figure class="plate" aria-labelledby="byT_">
+    <p class="plate-t" id="byT_">贝叶斯公式的每一项，都能在这张图上找到</p>
+    <div class="controls">
+      <span class="chips" id="byChips"></span>
+    </div>
+    <div class="controls">
+      <label>噪声程度 t <input type="range" id="byT" min="0.15" max="0.95" step="0.01" value="0.5"><output id="byTV"></output></label>
+      <label><span>看到的 x<sub>t</sub></span><input type="range" id="byX" min="-2.4" max="2.4" step="0.02" value="0.3"><output id="byXV"></output></label>
+    </div>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--plus)"></i><span>p(x<sub>t</sub> | x₀ = +1)</span></span>
+      <span><i class="sw" style="background:var(--minus)"></i><span>p(x<sub>t</sub> | x₀ = −1)</span></span>
+      <span><i class="sw" style="background:var(--ink)"></i><span>证据 p(x<sub>t</sub>)，两者的平均</span></span>
+    </div>
+    <div id="bySvg"></div>
+    <div class="pbar" aria-label="后验概率"><div id="byPP" style="background:var(--plus)"></div><div id="byPM" style="background:var(--minus)"></div></div>
+    <div class="readout" id="byOut"></div>
+    <p class="cap" id="byCap"></p>
+  </figure>
+
+  <div class="col">
+    <p>在这个例子里，后验能精确写出来。两个似然之比是 e<sup>2(1−t)x<sub>t</sub>/t²</sup>，先验各半，于是 P(x₀ = +1 | x<sub>t</sub>) = 1 / (1 + e<sup>−2(1−t)x<sub>t</sub>/t²</sup>)。把 t 调小，可以看到同一个 x<sub>t</sub> 让后验变得更"有把握"，下篇会用到这一点。把 t 调到 0.2 以下，还能看到密度超过 1。</p>
+    <p class="small">四个名字描述的是角色，不是固定贴在某个字母上的标签。换一个问题，比如第 6 节的"训练时猜权重"，未知的东西换了，四个角色就换成了另一批东西。</p>
+  </div>
+</section>
+
+<!-- ============ 4 ============ -->
+<section id="s4">
+  <h2><span class="n">4</span>条件期望：后验的平均</h2>
+  <p class="kp"><b>后验均值是"把每个可能的答案按后验概率加权平均"。用 MSE 训练的网络，学到的正是它。</b></p>
+  <div class="col">
+    <p><a class="g" href="#g-condexp">条件期望</a> E[x₀ | x<sub>t</sub>] 是"已知 x<sub>t</sub> 时，x₀ 的期望"，也叫后验均值。本例中：</p>
+    <p class="eq">E[<i>x</i>₀ | <i>x<sub>t</sub></i>] = P(+1 | <i>x<sub>t</sub></i>) · (+1) + P(−1 | <i>x<sub>t</sub></i>) · (−1) = tanh( (1 − <i>t</i>) · <i>x<sub>t</sub></i> / <i>t</i>² )</p>
+    <p>tanh 是一条从 −1 平滑过渡到 +1 的 S 形曲线。</p>
+    <p><b>为什么 <a class="g" href="#g-mse">MSE</a> 会学到它。</b>同一个输入 x<sub>t</sub>，有时对应 +1，有时对应 −1，网络对这个输入却只能给出一个数。要让平方误差平均起来最小，这个数只能取这些可能答案的均值。原因是一个恒等式：</p>
+    <p class="eq">平均平方误差 = (猜测 − 均值)² + 方差</p>
+    <p>方差和猜测无关，所以猜均值时误差最小。</p>
+    <p>后验均值好不好用，完全取决于后验长什么样：</p>
+    <ul class="plain">
+      <li><b>后验很集中</b>，比如几乎肯定是 +1：均值 ≈ +1，就是那个答案本身。</li>
+      <li><b>后验分成两个峰</b>，比如 +1、−1 各一半：均值是 0，落在两峰之间，是一个不存在的答案。</li>
+    </ul>
+  </div>
+  <p class="claim">下篇的全部内容，就是在讲这两种情况分别在什么时候出现。</p>
+</section>
+
+<!-- ============ 5 ============ -->
+<section id="s5">
+  <h2><span class="n">5</span>模型：分布族与两种参数</h2>
+  <p class="kp"><b>模型是一个分布族：架构定下分布的形式，权重从族里选出一个成员。有输入时，权重不是分布参数，而是"从输入算出分布参数的规则"。</b></p>
+  <div class="col">
+    <p><a class="g" href="#g-family">分布族</a>是一类形式相同、只差几个数的分布。这几个数取不同的值，就得到族里不同的成员。比如所有高斯分布组成一个族，N(0, 1) 和 N(70, 100) 是其中两个成员。</p>
+    <p>"参数"这个词有两种意思，必须分开（<a class="g" href="#g-param">模型参数与分布参数</a>）：</p>
+  </div>
+  <table class="t" aria-label="模型参数与分布参数">
+    <thead><tr><th></th><th>无条件高斯 N(μ, σ²)</th><th>条件高斯（回归网络）</th><th>大模型</th><th>扩散的去噪网络</th></tr></thead>
+    <tbody>
+      <tr><td>训练时调的：模型参数</td><td>μ、σ</td><td>权重 θ</td><td>权重 θ</td><td>权重 θ</td></tr>
+      <tr><td>决定具体分布的：分布参数</td><td>还是 μ、σ</td><td>均值 μ = 网络(x)，每个输入各算一个</td><td>logits = 网络(前文)，每个前文各算一组</td><td>猜测 D<sub>θ</sub>(x<sub>t</sub>, t)，每个 (x<sub>t</sub>, t) 各算一个</td></tr>
+      <tr><td>得到的分布</td><td>一个高斯</td><td>每个输入一个高斯</td><td>每个前文一个类别分布</td><td>每个 (x<sub>t</sub>, t) 一个以 D 为中心的高斯</td></tr>
+    </tbody>
+  </table>
+  <div class="pair">
+    <div class="col">
+      <p>只有没有输入时，模型参数和分布参数才是同一个东西。一旦有输入，两者就分开了。拿最简单的线性回归 μ(x) = 2x + 1 来说：权重是 2 和 1，训练好以后就固定了；μ 却随输入变化，x = 3 时是 7，x = 5 时是 11。</p>
+      <p>大模型那一列：网络先为每个前文算出 <a class="g" href="#g-softmax">logits</a>，也就是给词表里每个 token 打一个分数，相当于没归一化的对数概率；softmax 再把这组分数变成一个类别分布。</p>
+      <p>训练好的模型（权重固定）是族里的<b>一个</b>成员。有输入时，这一个成员是一个<a class="g" href="#g-cond">条件分布</a>：给它任何输入，它都能当场算出对应的那个分布。推理时调温度、top-p，改的只是从这个分布里采样的方式，成员本身没变。</p>
+    </div>
+    <p class="note">权重是"算分布参数的规则"；μ 和 logits 是"按规则针对某个输入算出来的结果"。</p>
+  </div>
+</section>
+
+<!-- ============ 6 ============ -->
+<section id="s6">
+  <h2><span class="n">6</span>训练：最大似然与最大后验</h2>
+  <p class="kp"><b>训练是在分布族里挑出一个成员，让训练数据在它下面出现的概率最大，这叫最大似然；再加上正则项，相当于乘上一个先验，叫最大后验。两种做法都只交出一组权重。</b></p>
+  <div class="col">
+    <p>训练时，不知道的是权重 θ，看到的是训练数据。于是第 3 节的四个角色换了一批东西来当：</p>
+    <ul class="plain">
+      <li><b>似然</b>：用权重 θ 给每条训练数据的答案打分，再全部乘起来（这里假设数据之间<a class="g" href="#g-iid">独立同分布</a>）。有输入时叫<a class="g" href="#g-condlik">条件似然</a>：L(θ) = p<sub>θ</sub>(y₁ | x₁) × … × p<sub>θ</sub>(y<sub>N</sub> | x<sub>N</sub>)，只给输出 y 打分，输入 x 只当条件。没有输入时：L(θ) = p<sub>θ</sub>(x₁) × … × p<sub>θ</sub>(x<sub>N</sub>)。</li>
+      <li><b><a class="g" href="#g-mle">最大似然</a></b>：找让 L(θ) 最大的 θ。连乘取对数会变成相加，再取负号，就是平时最小化的 loss。</li>
+      <li><b>先验</b>：训练前对权重的预设，对应正则项。L2 正则等价于"权重服从中心在 0 的高斯分布"。</li>
+      <li><b>后验与<a class="g" href="#g-map">最大后验</a></b>：−log 后验 = loss + 正则项 + 常数。最小化"loss + 正则项"，就是在找后验最高的那组权重。完整的后验分布不计算，参数太多，列不出来。</li>
+      <li><b>证据</b>：和 θ 无关，是常数，训练时直接丢掉。</li>
+    </ul>
+    <p>关于先验，有三点要说清：</p>
+    <ul class="plain">
+      <li>"不加正则 = 没有偏好"不对。权重是任意实数，在整个实数轴上"均匀"的分布凑不成 100%，严格说只能叫平坦先验；而且架构、初始化和优化器本身就让模型更容易学到某些函数，这些都是隐式的偏好。</li>
+      <li>权重不直接等于输出分布，所以"权重越小越合理"并不能直接翻译成"模型偏好什么样的输出"。真正决定模型偏好什么输出的，更多是架构。</li>
+      <li>大模型常用的 AdamW weight decay 和 L2 正则不严格等价，研究也表明它在大模型里主要改善的是优化过程，而不是充当先验。</li>
+    </ul>
+  </div>
+
+  <h3>为什么 loss 是交叉熵或 MSE</h3>
+  <div class="pair">
+    <div class="col">
+      <p>loss 就是负对数似然，所以输出用什么分布，就决定了 loss 长什么样：</p>
+      <ul class="plain">
+        <li><b>输出是类别分布</b>（分类、大模型）：−log p<sub>θ</sub>(y | x) 就是<a class="g" href="#g-ce">交叉熵</a>。</li>
+        <li><b>输出是高斯分布</b>（回归、扩散去噪）：假设 y = μ(x) + 高斯误差，标准差 σ 固定，那么</li>
+      </ul>
+      <p class="eq">−log N(<i>y</i>; μ(<i>x</i>), σ²) = (<i>y</i> − μ(<i>x</i>))² / (2σ²) + 常数</p>
+      <p>平方来自高斯密度的指数部分，取对数后正好剩下误差的平方。所以最小化 MSE，就等于在"误差是高斯"的假设下做最大似然。换成拉普拉斯误差，得到的就是 L1 loss。</p>
+      <p>这是等价关系，不是使用前提：误差不是高斯时，MSE 照样能用，它学到的仍然是条件均值（第 4 节）。</p>
+    </div>
+    <p class="note">选了什么样的误差分布，就得到什么样的 loss。</p>
+  </div>
+
+  <h3>两层贝叶斯，千万别混</h3>
+  <div class="col"><p>扩散模型里同时有两个"未知量"，各有自己的一套先验、似然、后验、证据：</p></div>
+  <table class="t" aria-label="两层贝叶斯">
+    <thead><tr><th style="width:12%"></th><th style="width:44%">训练层：找权重</th><th>去噪层：猜原图</th></tr></thead>
+    <tbody>
+      <tr><td>未知的</td><td>网络权重 θ</td><td>干净数据 x₀</td></tr>
+      <tr><td>看到的</td><td>一批训练配对</td><td>一张加噪图 x<sub>t</sub></td></tr>
+      <tr><td>先验</td><td>对权重的预设：正则项，以及架构带来的隐式偏好</td><td>数据分布：本例是 ±1 各一半</td></tr>
+      <tr><td>似然</td><td>这组权重给训练答案打的分，取负对数就是 MSE loss</td><td>加噪规则 p(x<sub>t</sub> | x₀)，我们自己定的</td></tr>
+      <tr><td>后验</td><td>不计算，只取一组权重</td><td>p(x₀ | x<sub>t</sub>)，网络输出的是它的均值</td></tr>
+      <tr><td>证据</td><td>不计算</td><td>加噪图本身的分布 p(x<sub>t</sub>)</td></tr>
+    </tbody>
+  </table>
+  <p class="claim">下篇说"网络学到的是后验均值"，指的是右边一列；训练这个网络用的最大似然，在左边一列。</p>
+</section>
+
+<!-- ============ 7 ============ -->
+<section id="s7">
+  <h2><span class="n">7</span>交叉熵与 KL 散度</h2>
+  <p class="kp"><b>交叉熵就是训练集上的平均负对数似然，两者是同一个式子。KL 散度里，写在前面的分布决定"在谁的样本上检查"。</b></p>
+  <div class="col">
+    <p>把训练集本身看成一个分布，每条样本占 1/N，叫<a class="g" href="#g-empirical">经验分布</a>。它和模型分布之间的<a class="g" href="#g-ce">交叉熵</a>，展开后就是"对每条训练样本求 −log p<sub>θ</sub>(样本)，再取平均"，也就是平均负对数似然。这不是巧合，而是同一个量：信息论把它叫"用模型给数据编码的平均长度"，统计学把它叫负对数似然。</p>
+    <p>loss 降不到 0 的那部分，是数据本身的不确定性，叫<a class="g" href="#g-entropy">熵</a>。同一个输入可能对应好几个答案时，谁也不可能每次都猜对。</p>
+    <p><a class="g" href="#g-kl">KL 散度</a>衡量两个分布差多少：</p>
+    <p class="eq">KL(P ‖ Q) = 对所有 x 求和：P(x) · log( P(x) / Q(x) ) = 交叉熵 − 熵</p>
+    <p>前面乘的 P(x) 表示"按 P 的样本取平均"。所以写在前面的分布提供样本，后面的分布接受检查，两者不能随便交换：</p>
+  </div>
+  <table class="t" aria-label="前向与反向 KL">
+    <thead><tr><th></th><th>前向 KL：KL(数据 ‖ 模型)</th><th>反向 KL：KL(模型 ‖ 目标)</th></tr></thead>
+    <tbody>
+      <tr><td>在谁的样本上检查</td><td>数据的样本</td><td>模型自己生成的样本</td></tr>
+      <tr><td>罚得最重的情况</td><td>数据里有的，模型几乎给了 0</td><td>模型生成的，目标几乎给了 0</td></tr>
+      <tr><td>倾向</td><td>宁滥勿缺：要覆盖数据的所有部分，覆盖不了时会把概率摊到中间</td><td>宁缺毋滥：只待在目标认可的地方，可能丢掉一部分</td></tr>
+      <tr><td>对应的训练</td><td>最大似然、SFT</td><td>带 KL 约束的强化学习、on-policy 蒸馏</td></tr>
+    </tbody>
+  </table>
+  <div class="col">
+    <p>前向 KL 等于交叉熵减去数据的熵，而数据的熵和模型无关，所以<b>最小化前向 KL = 最小化交叉熵 = 最大似然</b>。表里"倾向"那一行在模型能力不足时最明显，对表达能力很强的模型只是一种倾向。</p>
+    <p>两点补充：</p>
+    <ul class="plain">
+      <li>最大似然的定义里只有"模型 + 数据"，不需要"真实分布"。说它在逼近"真实分布"时，指的是<a class="g" href="#g-datagen">数据生成分布</a>：谁产生了训练数据，它就逼近谁，连数据的偏差一起学。</li>
+      <li>强化学习不是最大似然：它没有可以模仿的样本，只有打分；样本是模型自己采的，会随权重变化；权重（优势值）还可以是负的。</li>
+    </ul>
+  </div>
+</section>
+
+<div class="half"><span class="hl">下篇</span><span class="hs">为什么一步只能得到平均。只用上篇的零件：条件分布、贝叶斯公式、后验均值、MSE。</span></div>
+
+<!-- ============ 8 ============ -->
+<section id="s8">
+  <h2><span class="n">8</span>扩散的训练在学什么</h2>
+  <p class="kp"><b>训练时我们自己给数据加噪，再让网络用 MSE 从 x<sub>t</sub> 猜 x₀。按第 4 节，网络学到的是后验均值 D(x, t) = E[x₀ | x<sub>t</sub> = x]。</b></p>
+  <div class="pair">
+    <div class="col">
+      <p>每条训练样本是这样造出来的：随机抽一个 x₀、一个噪声 ε、一个 t，按第 2 节的规则算出 x<sub>t</sub>。网络的输入是 (x<sub>t</sub>, t)，要猜的目标是 x₀，loss 是 MSE。</p>
+      <p>按第 6 节，这是条件高斯的最大似然；按第 4 节，同一个 (x<sub>t</sub>, t) 可能来自不同的 x₀，所以网络学到的是它们的均值。实际训练里常让网络预测噪声 ε 或速度 v，三者可以互相换算，学到的都是同一个后验的均值。</p>
+      <p>本例的后验均值能精确写出来，就是第 4 节的 D(x, t) = tanh((1 − t)·x / t²)。真实的网络学到的是它的近似。</p>
+    </div>
+    <p class="note">一步和多步用的是同一个网络、同一个训练。区别只在采样时怎么用它。推理时权重不再变化；每一步"重新算后验"，是因为输入的 x<sub>t</sub> 换了，不是网络又学了什么。</p>
+  </div>
+
+  <div class="flow" role="img" aria-label="一步与多步采样的流程对比">
+    <div class="lab">一步</div>
+    <div class="row"><span class="bx">纯噪声 x₁</span><span class="ar">→</span><span class="bx net">网络</span><span class="ar">→</span><span class="bx out-m">E[x₀ | x₁]</span><span class="res">所有训练数据的平均</span></div>
+    <div class="lab">多步</div>
+    <div class="row"><span class="bx">纯噪声 x₁</span><span class="ar">→</span><span class="bx net">网络</span><span class="ar">→</span><span class="bx">走一小步</span><span class="ar">→</span><span class="bx net">网络</span><span class="ar">→</span><span class="bx">走一小步</span><span class="ar">→ … →</span><span class="bx out-s">E[x₀ | x<sub>末</sub>]</span><span class="res">一个具体的样本</span></div>
+  </div>
+  <p class="claim">所以要回答的问题是：同一个"条件均值"，为什么只用一次得到平均，接起来用却得到样本？</p>
+</section>
+
+<!-- ============ 9 ============ -->
+<section id="s9">
+  <h2><span class="n">9</span>采样：常微分方程与欧拉法</h2>
+  <p class="kp"><b>采样就是沿着速度场从噪声走到数据。欧拉法每一步按当前速度走一小段直线；在本例里，这等于"朝当前的猜测 D 走一部分路"。</b></p>
+  <div class="pair">
+    <div class="col">
+      <p><a class="g" href="#g-ode">常微分方程</a>（ODE）说的是：告诉你每个位置、每个时刻的速度，求出整条轨迹。</p>
+      <p>速度从哪来？训练时，x<sub>t</sub> = (1 − t)·x₀ + t·ε 随 t 变化的速度是 ε − x₀。采样时既不知道 ε 也不知道 x₀，只能用它们在当前位置的条件均值，这就是<a class="g" href="#g-velocity">速度场</a>：</p>
+      <p class="eq"><i>v</i>(<i>x</i>, <i>t</i>) = E[<i>ε</i> − <i>x</i>₀ | <i>x<sub>t</sub></i> = <i>x</i>] = (<i>x</i> − D(<i>x</i>, <i>t</i>)) / <i>t</i></p>
+      <p class="small">推导：由加噪规则得 ε = (x − (1 − t)·x₀) / t，代入 ε − x₀ 再取条件均值，x₀ 的位置换成 D 即可。</p>
+      <p>这个方程一般没有现成的解，只能一步步近似地算。最简单的办法叫<a class="g" href="#g-euler">欧拉法</a>：假设速度在一小段时间里不变，沿直线走一步，到了新位置再重新算速度。从时刻 t 走到更小的时刻 s：</p>
+      <p class="eq"><i>x<sub>s</sub></i> = <i>x<sub>t</sub></i> + (<i>s</i> − <i>t</i>) · <i>v</i> = (<i>s</i>/<i>t</i>) · <i>x<sub>t</sub></i> + (1 − <i>s</i>/<i>t</i>) · D(<i>x<sub>t</sub></i>, <i>t</i>)</p>
+      <p>右边这个形式有一个很直观的几何意义：把当前点 (t, x<sub>t</sub>) 和"终点处的猜测" (0, D) 连成一条直线，欧拉法就是沿这条直线走到时刻 s。最后一步走到 s = 0 时，输出正好等于 D，也就是最后一次的猜测。</p>
+    </div>
+    <p class="note">名字别混：这里是"欧拉法"，一种解常微分方程的数值方法。"欧拉方程"通常指流体力学或变分法里的另一组方程，和这里无关。</p>
+  </div>
+
+  <figure class="plate" aria-labelledby="euT">
+    <p class="plate-t" id="euT">欧拉法：每一步都瞄准当前的猜测，走一部分路</p>
+    <div class="controls">
+      <span>步数</span><span class="chips" id="euChips"></span>
+      <label>起点噪声 ε <input type="range" id="euEps" min="-2" max="2" step="0.05" value="0.8"><output id="euEpsV"></output></label>
+    </div>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--guess)"></i>欧拉法走出的折线</span>
+      <span><i class="sw" style="background:var(--guess);opacity:.4"></i>每一步瞄准的方向：指向这一刻的猜测 D</span>
+      <span><i class="sw" style="background:var(--ink)"></i>精确的轨迹（用极小的步长算出）</span>
+    </div>
+    <div id="euSvg"></div>
+    <div class="readout" id="euOut"></div>
+  </figure>
+  <p class="claim">不管走几步，最后的输出都是一个条件均值。区别只在于做最后一次猜测时，条件里有多少信息。</p>
+</section>
+
+<!-- ============ 10 ============ -->
+<section id="s10">
+  <h2><span class="n">10</span>一步：只能得到平均</h2>
+  <p class="kp"><b>从纯噪声一步走到底，输出等于 E[x₀ | x₁]。而 x₁ 和 x₀ 独立，看了等于没看，后验就是先验，所以输出就是全体训练数据的平均。</b></p>
+  <div class="col">
+    <p>三步推出来：</p>
+    <ol class="plain">
+      <li>只走一步，就是从 t = 1 直接走到 s = 0。按上一节的公式，输出 = D(x₁, 1) = E[x₀ | x₁]。</li>
+      <li>t = 1 时 x₁ = ε，和 x₀ 独立（第 2 节）。独立的意思就是"知道 x₁ 对 x₀ 没有任何信息"，所以后验 p(x₀ | x₁) 就等于先验 p(x₀)。</li>
+      <li>于是输出 = 先验的均值 = E[x₀] = 0（第 1 节）。</li>
+    </ol>
+    <p>这个结论和网络有多强无关，也和数据长什么样无关。换成真实图片：一步生成的结果，就是训练集里所有图片逐像素的平均，一张糊图。</p>
+  </div>
+  <table class="t" id="toyTable" aria-label="不同步数下的输出统计">
+    <thead><tr><th>步数</th><th class="n">输出的平均 |x₀|</th><th class="n">落在 ±1 附近</th><th class="n">落在两峰之间</th><th>看到了什么</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <p class="small">和开头的图用同一套计算。2 步时有一个干净的结论：第一步从 t = 1 走到 0.5，猜测是 0，所以 x<sub>0.5</sub> = ε / 2；第二步交出 E[x₀ | x<sub>0.5</sub>] = tanh(ε)，结果摊在 −1 和 1 之间，是"半糊"的。</p>
+</section>
+
+<!-- ============ 11 ============ -->
+<section id="s11">
+  <h2><span class="n">11</span>多步：为什么最后是样本</h2>
+  <p class="kp"><b>多步时，每一次猜测面对的后验都比上一次更窄。到最后一步，后验几乎只剩一个峰，它的均值就是一个具体的答案。</b></p>
+  <div class="col"><p>先在真实的图片上看一遍，再分三层解释。第一层看后验怎么变窄；第二层说明"每一步只用均值"为什么够用，适用于随机采样器；第三层说明确定性的 ODE 采样器为什么能得到整个数据分布。</p></div>
+
+  <h3 id="s11-0">先在图片上看一遍</h3>
+  <div class="pair">
+    <div class="col">
+      <p>把两点例子换成第 12 节那 12 张猫的简笔画（缩成 64 × 48 像素），加噪和去噪都按真实的方式逐像素进行。去噪用的不是训练出来的网络，而是这 12 张图上<b>精确的后验均值</b>：每一步先算"眼前这张噪声图来自每一只猫的可能"，再按这个可能把 12 只猫加权平均。</p>
+      <p>因为去噪器是精确的，多步最后会还原成 12 张训练图中的某一张，这就是第 12 节说的"记忆"。真实网络学到的是不完美的版本，能生成新图，但一步和多步的区别是一样的。图里也可以把去噪器换成"局部"的，看它怎样拼出训练集里没有的图（第 12 节会解释）。</p>
+    </div>
+    <p class="note">上排是每一步开始时的位置，下排是这一步的猜测：从一张糊图，慢慢变成一只具体的猫。</p>
+  </div>
+  <figure class="plate" aria-labelledby="imT">
+    <p class="plate-t" id="imT">在像素上：加噪、一步去噪、多步去噪</p>
+    <p class="rowlab">加噪：同一张训练图，t 从 0 到 1</p>
+    <div class="imgstrip" id="imFwd"></div>
+    <div class="controls" style="margin-top:16px"><span>去噪器</span><span class="chips" id="imMode"></span></div>
+    <div class="controls"><span>去噪步数</span><span class="chips" id="imChips"></span><button class="btn" type="button" id="imSeed">换一个噪声</button></div>
+    <div id="imProc"></div>
+    <p class="cap" id="imCap"></p>
+    <p class="rowlab" style="margin-top:18px">同样 6 个初始噪声，用不同步数各生成一次</p>
+    <div id="imGrid"></div>
+    <p class="cap" id="imGridCap"></p>
+  </figure>
+  <div class="col">
+    <p>这张图里能看到下面三层要解释的三件事：</p>
+    <ul class="plain">
+      <li><b>一步就是平均</b>：t = 1 时后验等于先验，12 只猫各占 1/12，猜测就是平均图，换噪声也不变（第 10 节）。</li>
+      <li><b>猜测越来越确定</b>：下排的百分比，也就是后验里占比最大的那只猫的权重，从 8% 一路涨到接近 100%。噪声在变小，后验在收缩（第一层）。</li>
+      <li><b>步子太大会丢掉噪声里的信息</b>：只走 2 步时，第一步就把位置拉到"一半噪声 + 一半平均图"，噪声带来的信息被冲掉了大半，第二步再猜，结果容易集中到少数几只"最普通"的猫上。真实网络在步数太少时，通常表现为模糊和细节缺失；这里的去噪器是精确的，所以表现成多样性丢失。步数足够多以后，同一个噪声的结果基本不再变化，已经接近 ODE 的精确解（第二、三层）。</li>
+    </ul>
+  </div>
+
+  <h3 id="s11-1">第一层：后验越来越窄，信息来自噪声变小</h3>
+  <div class="pair">
+    <div class="col">
+      <p>选一个起点噪声，拖动进度条。左图是这个点此刻的位置 x<sub>t</sub>，右图是此刻的猜测 D(x, t) 作为 x 的函数，也就是第 4 节那条 tanh 曲线在当前 t 下的样子。下方的色条是此刻的后验。</p>
+    </div>
+    <p class="note">盯住右图：曲线从一条水平线，慢慢立成一级台阶。</p>
+  </div>
+  <figure class="plate" aria-labelledby="trT">
+    <p class="plate-t" id="trT">位置几乎不动，猜测却从 0 变成了 1</p>
+    <div class="controls">
+      <label>起点噪声 ε <input type="range" id="trEps" min="-2" max="2" step="0.05" value="0.8"><output id="trEpsV"></output></label>
+      <label>进度 <input type="range" id="trU" min="0" max="99" step="1" value="0"><output id="trUV"></output></label>
+      <button class="btn" type="button" id="trPlay">播放</button>
+    </div>
+    <div class="twin">
+      <div><p class="panel-t">这个点的位置 x<sub>t</sub>（横轴：时间，从噪声到数据）</p><div id="trL"></div></div>
+      <div><p class="panel-t">此刻的猜测：D(x, t) 作为 x 的函数</p><div id="trR"></div>
+        <div class="pbar" aria-label="后验概率"><div id="pbP" style="background:var(--plus)"></div><div id="pbM" style="background:var(--minus)"></div></div>
+      </div>
+    </div>
+    <div class="readout" id="trOut"></div>
+  </figure>
+  <div class="pair">
+    <div class="col">
+      <p>以 ε = 0.8 为例，x<sub>t</sub> 一直在 0.6 到 0.9 之间晃，变的是右边那条曲线。t = 1 时它是水平线：不管 x 是多少，猜测都是 0，因为后验就是先验。t 越小曲线越陡，最后变成台阶：x &gt; 0 就猜 +1，x &lt; 0 就猜 −1。</p>
+      <p>同一个位置 x ≈ 0.61：t = 0.7 时噪声还大，看不出它来自哪个峰，后验接近各半，猜 0.358；到 t = 0.5 时噪声小了，同一个位置已经能说明"多半来自 +1"，后验约 92% 对 8%，猜 0.841。</p>
+      <p>一步时，最后一次猜测的条件是 x₁，信息为零；多步时，最后一次猜测的条件是 x<sub>末</sub>，噪声已经很小，后验几乎只剩一个峰。</p>
+    </div>
+    <p class="note">信息不是靠"走得远"得来的，是靠噪声变小。同一个位置，噪声越小，说明的事越多。</p>
+  </div>
+
+  <h3 id="s11-2">第二层：步子小时，一步之内的后验接近单峰高斯</h3>
+  <div class="pair">
+    <div class="col">
+      <p>随机采样器（DDPM 这一类）每一步要做的，是从"往回退一小步"的后验 p(x<sub>s</sub> | x<sub>t</sub>) 里随机抽出下一个位置。它的做法是：用网络给的均值，配一个事先定好的方差，画一个高斯，从里面抽。这个做法什么时候是对的？</p>
+      <p>按贝叶斯公式，p(x<sub>s</sub> | x<sub>t</sub>) 正比于两项相乘：这一小步加噪的似然，是一个很窄的高斯；上一时刻的分布 p<sub>s</sub>，它在噪声的尺度上是平滑的。很窄的范围里，平滑的曲线近似一条直线，两者相乘还是高斯。所以<b>步子小时，一步之内的后验近似是一个方差已知的高斯，而方差已知的高斯，均值就是它的全部信息</b>。学到均值，再按已知方差抽样，就精确地完成了这一步。</p>
+    </div>
+    <p class="note">均值丢不丢信息，不看均值本身，看被平均的那个分布：单峰而且窄，就不丢。</p>
+  </div>
+  <figure class="plate" aria-labelledby="stT">
+    <p class="plate-t" id="stT">从 x<sub>t</sub> 退一步：真实的后验，和采样器用的高斯</p>
+    <p class="plate-s">这张图换用另一种加噪写法：x<sub>t</sub> = x₀ + σ<sub>t</sub>·ε，只加噪声、不缩小数据，当前噪声的标准差 σ<sub>t</sub> = 1。把步子从小拖到大，看那个高斯从什么时候开始对不上真实的后验。</p>
+    <div class="controls">
+      <label><span>当前位置 x<sub>t</sub></span><input type="range" id="stX" min="-1.5" max="1.5" step="0.05" value="0.3"><output id="stXV"></output></label>
+      <label>这一步跳多远 <input type="range" id="stJ" min="0" max="100" step="1" value="4"><output id="stJV"></output></label>
+    </div>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--ink)"></i><span>真实的后验 p(x<sub>s</sub> | x<sub>t</sub>)</span></span>
+      <span><i class="sw" style="background:var(--plus)"></i>其中来自 +1 的部分</span>
+      <span><i class="sw" style="background:var(--minus)"></i>其中来自 −1 的部分</span>
+      <span><i class="sw" style="background:var(--guess)"></i>采样器用的高斯：均值 + 固定方差</span>
+    </div>
+    <div id="stSvg"></div>
+    <div class="readout" id="stOut"></div>
+  </figure>
+  <div class="pair">
+    <div class="col">
+      <p>这个机制成立的条件是：<b>这一步加的噪声，要远小于已经有的噪声</b>，也就是相对步长 (σ<sub>t</sub>² − σ<sub>s</sub>²) / σ<sub>s</sub>² 远小于 1。步子太大，一步之内的后验又裂成两个峰，"均值 + 固定方差"的高斯就落在两峰之间，抽出来的点是糊的。</p>
+      <p>所以切分时间步要看相对步长。按绝对值看，噪声越小，步子要越小。</p>
+    </div>
+    <p class="note"><b>一个常见的误解</b>：说"调度器在高噪声段把步子排得更密"，作为一般规律不对。按上面的条件，低噪声端的绝对步长要更小，EDM 的调度就是低噪声端更密。SD3 这类高分辨率模型会把步子往高噪声端挪，那是为了应对"分辨率越高，信号越不容易被噪声盖住"，是另一个考虑。</p>
+  </div>
+
+  <h3 id="s11-3">第三层：平均速度搬运的是整个分布</h3>
+  <div class="pair">
+    <div class="col">
+      <p>训练时，每一对 (ε, x₀) 之间连一条直线；网络学的是"经过某一点的所有直线，速度的平均"。采样时，点沿着这个平均速度走，并不沿着任何一条原始的直线。</p>
+      <p>可以想象人群穿过广场：每个人都有自己计划的直线路线，路线彼此交叉；但人群在每个位置的流速，是经过那里所有人速度的平均。跟着人流走，每个人都会走到某个出口，各个出口的人数比例也是对的，只是不一定是他原本计划的那个出口。</p>
+      <p>数学上，这由<a class="g" href="#g-continuity">连续性方程</a>保证：某处的概率变化 = 流进来的 − 流出去的，而流量 = 密度 × 平均速度。所以按平均速度推着走，每个时刻点的分布正好是 p<sub>t</sub>，最后正好是数据分布。这是 flow matching 论文里的定理。</p>
+    </div>
+    <p class="note">平均速度不是某一个人的速度，是人流的速度。人流的速度，搬运的是整群人。</p>
+  </div>
+  <figure class="plate" aria-labelledby="fwT">
+    <p class="plate-t" id="fwT">训练时看到的配对，和采样时实际走的路</p>
+    <div class="controls"><span class="chips" id="fwChips"></span></div>
+    <div id="fwSvg"></div>
+    <p class="cap" id="fwCap"></p>
+  </figure>
+  <div class="pair">
+    <div class="col">
+      <p>常微分方程的解不会交叉。x = 0 这条线始终不动，因为那里的猜测是 0、速度是 0。所以 ε &gt; 0 的点全部走到 +1，ε &lt; 0 的点全部走到 −1：从噪声到数据的对应关系是 Φ(ε) = sign(ε)，即正数对应 +1、负数对应 −1。</p>
+      <p>但在训练配对里，ε = 0.8 有一半时候配的是 −1，因为 ε 和 x₀ 是独立配对的。直接拿这些配对做回归，只能学到 0。"这个 ε 该去哪"这个确定的对应关系，训练数据里根本没有，是沿平均速度一步步走出来的。</p>
+      <p>这也说明了一步蒸馏在做什么：reflow 和蒸馏先用多步 ODE 为每个 ε 算出确定的终点，再拿 (ε, Φ(ε)) 去回归。目标确定了，回归学到的就不再是均值。难点在于这个对应关系在两峰交界处是跳变的，一步网络要拟合这种陡峭的变化。这一点是推断，不是论文结论。</p>
+    </div>
+    <p class="note">训练数据里只有"ε 和 x₀ 随机配对"；"这个 ε 该去哪"是采样时才算出来的。</p>
+  </div>
+
+  <div class="deep">
+    <h3 id="s11-4">更深一层：信息一直都在，只是一步取不出来</h3>
+    <p>把猜测看成 x 的函数 D(·, t)，就是第一层右图那条曲线。<a class="g" href="#g-tweedie">Tweedie 公式</a>说，后验均值可以由 <a class="g" href="#g-score">score</a>（log 密度上升最快的方向）算出来：</p>
+    <p class="eq">E[<i>x</i>₀ | <i>x<sub>t</sub></i>] = ( <i>x<sub>t</sub></i> + σ<sub><i>t</i></sub>² · ∇log p<sub><i>t</i></sub>(<i>x<sub>t</sub></i>) ) / α<sub><i>t</i></sub>，<span class="cm">本例中 α<sub>t</sub> = 1 − t，σ<sub>t</sub> = t</span></p>
+    <p>反过来，知道每一处的 D，就知道每一处的 score，也就确定了整个 p<sub>t</sub>。所以"学去噪"和"学 score"是同一件事，而且任何 t &lt; 1 时的这条曲线，理论上都含有数据分布的全部信息：p<sub>t</sub> 是数据分布被高斯"模糊"后的结果，而高斯模糊是可以逆转的。</p>
+    <p>一步生成的问题在于只用了 t = 1 这一处，那里曲线是一条水平线，信息为零。t 接近 1 时信息还在，但只藏在曲线极其微小的起伏里。想直接把它还原，相当于把一张被高度模糊的图一次反模糊回来，细节越精细，需要放大的倍数越大，任何有限精度的网络都扛不住。多步采样，等于把这一次困难的大反模糊，拆成很多次容易的小去噪。</p>
+  </div>
+</section>
+
+<!-- ============ 12 ============ -->
+<section id="s12">
+  <h2><span class="n">12</span>条件均值不就是目标吗</h2>
+  <p class="kp"><b>学条件均值是训练目标，没问题；但生成要的是"从分布里抽一个样本"，交出条件均值就是交出一张糊图。</b></p>
+  <div class="targets">
+    <div>
+      <h4>训练目标</h4>
+      <p>在每个噪声程度、每个位置上，学 E[x₀ | x<sub>t</sub>, 条件]。它是一个中间量，和 score 等价。</p>
+      <p class="verdict">学条件均值：对，这正是要学的。</p>
+    </div>
+    <div>
+      <h4>生成目标</h4>
+      <p>从 p(x | "波斯猫") 里抽一张图。每次不同，每张都像一张真实照片。</p>
+      <p class="verdict">直接交出条件均值：不对，那是一张糊图。</p>
+    </div>
+  </div>
+  <div class="pair">
+    <div class="col">
+      <p>E[x | "一只波斯猫"] 正好就是一步生成的输出：训练集里所有波斯猫照片逐像素求平均。下面这台平均器用简笔画代替照片，平均是逐像素精确计算的。</p>
+    </div>
+    <p class="note">切换三种情况，再把"平均前几张"从 1 拖到 12。</p>
+  </div>
+  <figure class="plate" aria-labelledby="catT">
+    <p class="plate-t" id="catT">波斯猫平均器</p>
+    <div class="controls">
+      <span class="chips" id="catChips"></span>
+      <label>平均前 <input type="range" id="catK" min="1" max="12" step="1" value="12"><span><output id="catKV" style="min-width:0"></output> 张</span></label>
+    </div>
+    <div class="catgrid">
+      <div class="thumbs" id="catThumbs"></div>
+      <div class="avgbox"><p class="panel-t">逐像素平均的结果</p><canvas id="catAvg" width="240" height="180" role="img" aria-label="所选猫图的逐像素平均"></canvas></div>
+    </div>
+    <p class="cap" id="catCap"></p>
+  </figure>
+  <div class="pair">
+    <div class="col">
+      <p>道理和两点例子一样：真实图片分布在一个弯曲的低维"曲面"上，曲面上两个点的平均落在曲面外面，就像 +1 和 −1 的平均 0 不是任何一个数据点。朝左的猫和朝右的猫平均，得到的是两只半透明的猫叠在一起，不是一只朝正面的猫。</p>
+      <p>"平均脸"看起来像脸，正好是个反例：做之前已经按五官位置把照片对齐了。对齐等于人工去掉了姿态和位置的变化，让剩下的分布接近单峰，均值才清楚。<b>多步采样在自动做这件事</b>：到后期，x<sub>t</sub> 已经定下了姿态、构图和背景，后验里剩下的只有细微差别。</p>
+      <p>另外，人说的"典型的波斯猫"不是像素平均，而是一个处在高概率区域的具体样本。均值也没有多样性：同一个提示词永远输出同一张图。</p>
+    </div>
+    <p class="note">像素的平均，不是语义的平均。</p>
+  </div>
+
+  <h3 id="s12-mem">连"复现训练图"也不是目标</h3>
+  <div class="pair">
+    <div class="col">
+      <p>训练集只有有限的 N 张图。如果网络精确学到了这个训练集上的条件均值，那么 p<sub>t</sub> 就是 N 个高斯叠在一起，用精确的采样器跑出来的，只会是 N 张训练图之一，也就是纯粹的<a class="g" href="#g-memo">记忆</a>。开头那个两点例子正是这样：两张"训练图" ±1，采出来的永远只有 ±1。</p>
+    </div>
+    <p class="note">学得"太准"，反而只会背答案。</p>
+  </div>
+  <figure class="plate" aria-labelledby="memT">
+    <p class="plate-t" id="memT">5 个训练点：精确拟合，和有一点平滑</p>
+    <p class="plate-s">h = 0 表示网络精确学到了训练集上的条件均值。把 h 调大，表示网络没有完美拟合，在训练点之间做了平滑，这里用<a class="g" href="#g-kernel">核平滑</a>来示意。真实网络的平滑方式复杂得多，这张图只演示"不完美拟合会带来新样本"这件事。</p>
+    <div class="controls"><label>平滑程度 h <input type="range" id="memH" min="0" max="0.3" step="0.01" value="0"><output id="memHV"></output></label></div>
+    <div id="memSvg"></div>
+    <div class="readout" id="memOut"></div>
+  </figure>
+  <div class="col">
+    <p>能生成新的波斯猫，靠的恰恰是网络没有完美拟合经验最优解。数据少时，扩散模型确实会复制训练图（Somepalli 等，CVPR 2023）。Kadkhodaie 等（ICLR 2024）发现，训练集足够大时，用不相交的两半数据分别训练出的两个模型，会生成几乎相同的图：它们学到的是数据背后的分布，而不是各自记住的样本。</p>
+  </div>
+  <h3 id="s12-new">新图从哪来：局部拼贴与概念组合</h3>
+  <div class="pair">
+    <div class="col">
+      <p>真实网络能生成训练集里没有的图，包括把不同样本的部件、属性拼到一起。Kamb 和 Ganguli（ICML 2025）找到了两个关键原因：卷积网络每个位置只看一小块邻域（局部性），而且同一套权重用在每个位置（平移等变）。这让每一小块区域只参考训练图里"长得像的小块"，这些小块可以来自不同的训练图。结果是一张局部处处合理的拼贴图，可能的组合多到指数级。按这个原理写出的解析模型，能以 r² ≈ 0.95 的精度预测训练好的卷积扩散模型的输出；注意力层则负责让拼贴在语义上整体一致。</p>
+      <p>第 11 节的图片演示里可以把去噪器切换成"局部"的：每个位置只按周围 7×7 或 13×13 的小块计算后验。这时输出不再是任何一张训练图，而是一张新图；但只有局部信息时，拼出来的往往整体不像一只猫。局部性负责"拼"，要拼成一只合理的新猫，还需要全局的信息。</p>
+      <p>在概念层面，Okawa 等（NeurIPS 2023）发现条件扩散模型能生成训练里没出现过的概念组合，比如没见过的"形状 × 颜色"搭配。但这种能力由各个单项能力相乘而来，越罕见的组合需要越多训练；属性张冠李戴、数量不对，也都是常见的失败。</p>
+    </div>
+    <p class="note">完美拟合只会背；不完美、但带着合适偏置的拟合，才会创造。更多研究见<a href="diffusion_generalization.html">扩散模型泛化研究整理</a>。</p>
+  </div>
+  <table class="t" aria-label="三种情况对比">
+    <thead><tr><th style="width:46%">用什么</th><th>得到什么</th></tr></thead>
+    <tbody>
+      <tr><td>一步，全局的条件均值</td><td>一张糊图</td></tr>
+      <tr><td>精确的经验条件均值 + 精确的多步采样</td><td>训练图原样复现（上图 h = 0）</td></tr>
+      <tr><td>只看局部的去噪器 + 多步采样</td><td>训练集里没有的新图：局部合理，整体不一定合理（第 11 节可切换）</td></tr>
+      <tr><td>网络学到的平滑条件均值 + 多步采样</td><td>新的、清楚的样本。这才是要的</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ 13 ============ -->
+<section id="s13">
+  <h2><span class="n">13</span>为什么 LLM 一次定一个 token，扩散却要反复重算</h2>
+  <p class="kp"><b>区别在于每一步要同时决定多少东西、用什么分布来表示：LLM 每步只定 1 个离散 token，类别分布能精确表示"可能是 A，也可能是 B"，抽一个就定下来；扩散每步要同时定整张图几十万个<a class="g" href="#g-contdisc">连续</a>数值，只能用均值来表示，只有步子小时才准。</b></p>
+  <table class="t" aria-label="LLM 与扩散的拆法对比">
+    <thead><tr><th style="width:20%"></th><th>LLM（<a class="g" href="#g-ar">自回归</a>）</th><th>扩散</th></tr></thead>
+    <tbody>
+      <tr><td>怎么拆</td><td>按位置：一次定一个 token</td><td>按噪声程度：每次把整张图变清楚一点</td></tr>
+      <tr><td>每一步要表示的分布</td><td>下一个 token 是谁：离散，几万种可能</td><td>下一步整张图在哪：连续，几十万维</td></tr>
+      <tr><td>用什么表示</td><td><a class="g" href="#g-cat">类别分布</a>，能表示任意多个峰</td><td>均值，相当于一个单峰高斯</td></tr>
+      <tr><td>能不能直接抽样</td><td>能，精确地抽</td><td>只有步子小时，均值才够用</td></tr>
+      <tr><td>前面的结果改不改</td><td>不改，抽出的 token 成为后面的前文</td><td>每一步都改整张图</td></tr>
+    </tbody>
+  </table>
+  <div class="pair">
+    <div class="col">
+      <p>两者推理时权重都固定不变，变的是每一步的输入。LLM 每生成一个 token，前文就多一个 token，同一套权重据此算出新的下一个 token 分布，这就是<a class="g" href="#g-chain">链式法则</a>；扩散每走一步，x<sub>t</sub> 就换成一个噪声更小的新位置，同一套权重据此算出新的后验均值。区别只在于：LLM 每次添上一块定下来的内容，扩散每次把整张图一起改清楚。</p>
+      <p><b>一步同时决定很多维，会丢掉维度之间的关联。</b>连续的情况只能给均值：朝左和朝右的猫平均成一张糊图。离散的情况只能让每个位置各自独立地抽，也就是假设它们<a class="g" href="#g-condindep">条件独立</a>。非自回归翻译有个经典例子：英文"Thank you"可以译成德文"Danke schön"，也可以译成"Vielen Dank"；各位置独立地抽，就可能拼出"Danke Dank"（Gu 等，2018）。LLM 每步只定一维，后面的维度以它为条件，关联一点不丢。</p>
+    </div>
+    <p class="note">扩散的多步和 LLM 的逐 token，解决的是同一个问题：不要在一步里替很多相互关联的维度同时做决定。</p>
+  </div>
+  <div class="col">
+    <p>这也不是"文本和图像"的区别：</p>
+    <ul class="plain">
+      <li><b>图像可以像 LLM 一样生成</b>：先切成离散的 token，再一个一个预测，每步是一个类别分布，完全不用去噪，比如 DALL·E 1、Parti、LlamaGen。</li>
+      <li><b>文本可以像扩散一样生成</b>：LLaDA 这类掩码扩散语言模型从"全部遮住"开始，每步同时预测所有被遮住的位置，再把没把握的重新遮上，要走很多步；一次揭开太多，就会出现"Danke Dank"式的错误。</li>
+      <li><b>连续的 token 即使自回归，也不能只给均值</b>：MAR（Li 等，2024）给每个连续 token 配一个小扩散模型来表示它的分布，否则还是糊。</li>
+    </ul>
+    <p>所以，"是不是每个 token 都是一次去噪"：不完全是，但有联系。自回归可以看成一种特殊的掩码扩散：每步按固定顺序只揭开一个位置，并且精确地抽样。"是不是闭合解的问题"：不是。LLM 每一步同样没有闭合解；关键是这一步的分布能不能被选用的分布形式精确表示，并且能直接从中抽样。</p>
+  </div>
+</section>
+
+<!-- ============ 14 ============ -->
+<section id="s14">
+  <h2><span class="n">14</span>一句话</h2>
+  <p class="final">每一步学条件均值，没有问题；只用一次条件均值，才是问题。多步采样让每一次猜测面对的后验都足够窄，均值不再抹掉信息，最后一次的均值就是一个具体的样本。</p>
+  <div class="stack3">
+    <div class="stat"><div class="k">训练</div><p>在分布族里做最大似然（MSE），网络学到后验均值 E[x₀ | x<sub>t</sub>]。</p></div>
+    <div class="stat"><div class="k">一步</div><p>x₁ 与 x₀ 独立，后验 = 先验，输出 = 全体数据的平均。</p></div>
+    <div class="stat"><div class="k">多步</div><p>噪声逐步变小，后验逐步变窄，最后的均值就是一个样本。</p></div>
+  </div>
+  <h3 id="s14-note">容易混的一点：推理不是在"取后验最大值"</h3>
+  <table class="t" aria-label="训练与推理的目标">
+    <thead><tr><th style="width:18%"></th><th>训练</th><th>推理（生成）</th></tr></thead>
+    <tbody>
+      <tr><td>未知的是</td><td>权重 θ</td><td>要生成的图或文本</td></tr>
+      <tr><td>目标</td><td><a class="g" href="#g-mle">最大似然</a>，加正则相当于<a class="g" href="#g-map">最大后验</a>；只留下一组权重</td><td>从分布里<b>抽一个样本</b>，不是挑最可能的那一个</td></tr>
+      <tr><td>扩散每一步用的</td><td>—</td><td>后验的<b>均值</b>（第 4 节），不是后验的最大值</td></tr>
+      <tr><td>LLM 每一步用的</td><td>—</td><td>从下一个 token 的分布里抽样；只有贪心解码才是每步取最大</td></tr>
+    </tbody>
+  </table>
+  <div class="col">
+    <p>一个后验可以给出三样不同的东西：均值、最大值（最可能的那个值）、一个随机样本。在两点例子里，t = 0.5、x<sub>t</sub> ≈ 0.61 时后验是 +1 占 92%、−1 占 8%：均值是 0.84，最大值是 +1，样本则 92% 的时候是 +1、8% 的时候是 −1。扩散每一步拿均值往前走；走完多步后，输出落在 +1 或 −1 上，而且比例正确，所以整体上是在"抽样本"。</p>
+    <p>为什么生成时不取后验或分布的最大值，下面用两个演示说明。</p>
+  </div>
+
+  <h3 id="s14-max">为什么不取最大值</h3>
+  <div class="pair">
+    <div class="col">
+      <p><b>原因一：取最大值会丢掉多样性。</b>模型分布说"+1 占 60%、−1 占 40%"，意思是 10 次里应该有 4 次是 −1。如果每次都取最可能的那个，10 次全是 +1，那 40% 永远不会出现。LLM 的<a class="g" href="#g-greedy">贪心解码</a>就是这样：同一个提示词，永远得到同一句话。</p>
+      <p>Holtzman 等（ICLR 2020）还发现，在长文本上一味追求最高概率（比如 beam search），得到的往往是平淡、重复、甚至原地打转的文字；人写的文字并不是概率最高的那一句。</p>
+    </div>
+    <p class="note">分布说"有 40% 的可能"，取最大值等于把这 40% 当成 0。</p>
+  </div>
+  <figure class="plate" aria-labelledby="mxAT">
+    <p class="plate-t" id="mxAT">每次抽一个样本，和每次取最可能的</p>
+    <div class="controls">
+      <span class="chips" id="mxAChips"></span>
+      <label id="mxAPWrap">+1 的概率 <input type="range" id="mxAP" min="0.5" max="0.9" step="0.05" value="0.6"><output id="mxAPV"></output></label>
+      <button class="btn" type="button" id="mxASeed">再抽 200 次</button>
+    </div>
+    <div id="mxASvg"></div>
+    <div class="readout" id="mxAOut"></div>
+    <p class="cap">"下一个 token"那一组的概率是假设的数字，只用来演示。</p>
+  </figure>
+
+  <div class="pair">
+    <div class="col">
+      <p><b>原因二：在高维空间里，最可能的那个点不像样本。</b>这一点反直觉，关键是分清两件事："某一个点的密度"，和"落在某一片区域里的概率"。第 1 节说过，概率是密度曲线下的面积，粗略地说就是"密度 × 这片区域有多大"。</p>
+      <p>以标准高斯 N(0, I) 为例。它在原点的密度最高，离原点越远，密度越低。但离原点越远，同样厚度的"一圈"所包含的空间就越大；在 d 维里，这个空间大约按距离的 d − 1 次方增长。密度在变小，空间增长得更快，两者一乘，概率就集中在离原点约 √d 的一圈薄壳上，这叫<a class="g" href="#g-typical">典型集合</a>。维度越高，这一圈离原点越远，原点附近几乎没有概率。</p>
+    </div>
+    <p class="note">密度最高的地方，不等于样本最多的地方。维度越高，两者离得越远。</p>
+  </div>
+  <figure class="plate" aria-labelledby="mxBT">
+    <p class="plate-t" id="mxBT">标准高斯：随手抽一个样本，它离原点有多远</p>
+    <div class="controls"><span>维度 d</span><span class="chips" id="mxBChips"></span></div>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--ink)"></i>单个点的密度：离原点越远越低</span>
+      <span><i class="sw" style="background:var(--muted)"></i>同样厚度的一圈有多少空间：离原点越远越多</span>
+      <span><i class="sw" style="background:var(--guess)"></i>两者相乘：样本落在这个距离上的可能</span>
+    </div>
+    <div id="mxBSvg"></div>
+    <div class="readout" id="mxBOut"></div>
+    <p class="rowlab" style="margin-top:14px">一张 64×48 的彩色图有 9216 个数。最左边是 N(0, I) 里密度最高的那一张，右边是从中随便抽的 5 张</p>
+    <div class="imgstrip" id="mxBImg"></div>
+    <p class="cap">三条曲线各自缩放到最高为 1，只看形状。</p>
+  </figure>
+  <div class="col">
+    <p>放到图像上：9216 维的 N(0, I) 里密度最高的点是全 0，显示出来是一张平灰图；它的密度大约是一张典型噪声图的 10<sup>2001</sup> 倍。可你从这个分布里抽一辈子，也抽不到它，甚至抽不到离它近一点的图：抽出来的每一张离原点都在 96 左右，落在离原点 1 以内的概率大约是 10<sup>−16270</sup>。</p>
+    <p>真实的生成模型也有同样的现象。Nalisnick 等（ICLR 2019）发现，几种能算出似然的图像生成模型，给出最高似然的是常数图这类最简单的图，甚至会给没见过的、更"平淡"的数据集打出比训练集更高的似然。所以"最可能的那张图"，不是我们想要生成的图。</p>
+  </div>
+</section>
+
+<!-- ============ 术语表 ============ -->
+<section id="gloss">
+  <h2><span class="n">·</span>术语表</h2>
+  <p class="small">按在正文里出现的大致顺序排列。每条说明它是什么，以及在本页里指什么。</p>
+
+  <p class="gsec">分布与随机变量</p>
+  <dl class="gloss">
+    <div class="gi" id="g-rv"><dt class="gt">随机变量</dt><dd class="gd">结果还没确定的量。本页里：随手抽一条训练数据 x₀，以及噪声 ε。</dd></div>
+    <div class="gi" id="g-dist"><dt class="gt">概率分布</dt><dd class="gd">说明随机变量的每种可能各占多少，全部加起来是 100%；连续变量是"曲线下总面积为 1"。</dd></div>
+    <div class="gi" id="g-cat"><dt class="gt">类别分布</dt><dd class="gd">从有限个类别里选一个，每个类别有自己的概率。大模型每个位置输出的就是它。中文常把它叫"多项分布"，严格说多项分布是"抽 n 次、各类别被抽中几次"，类别分布是 n = 1 的情况。</dd></div>
+    <div class="gi" id="g-contdisc"><dt class="gt">离散与连续</dt><dd class="gd">离散：只能从有限个选项里挑一个，比如词表里的某个 token，两个选项"之间"没有合法的值。连续：可以取一个范围内的任意实数，比如像素值或潜变量 0.3127……。连续时，两个值的平均本身仍是一个合法的点，所以 MSE 才能输出"平均图"；离散时，两个 token 的平均不是 token，只能输出概率再从中挑一个。例：图片里一个像素存成整数 200，送进扩散模型前先换算成实数 200 / 127.5 − 1 ≈ 0.5686，加噪、去噪过程中它可以是 0.1280、0.5521 这类任意实数，只在最后保存时才四舍五入回整数。</dd></div>
+    <div class="gi" id="g-density"><dt class="gt">概率密度</dt><dd class="gd">连续变量用的"单位长度上的概率"。落在某个区间里的概率，等于密度曲线在这个区间下的面积；恰好等于某一个值的概率是 0。密度本身可以大于 1。</dd></div>
+    <div class="gi" id="g-exp"><dt class="gt">期望（均值）</dt><dd class="gd">每个可能的值乘以它的概率，再加起来。x₀ 的期望是 0。</dd></div>
+    <div class="gi" id="g-var"><dt class="gt">方差与标准差</dt><dd class="gd">方差：各个值离均值的距离，取平方后按概率平均。标准差是方差的平方根，单位和原数据相同，表示"一般偏离均值多远"。</dd></div>
+    <div class="gi" id="g-gauss"><dt class="gt">高斯分布（正态分布）</dt><dd class="gd">钟形曲线，记作 N(μ, σ²)：μ 是中心，σ 是标准差，括号里第二个位置写的是方差。只有一个峰。噪声 ε 服从 N(0, 1)。</dd></div>
+    <div class="gi" id="g-typical"><dt class="gt">典型集合</dt><dd class="gd">高维分布里几乎全部概率所在的那片区域。对 d 维标准高斯，它是离原点约 √d 的一圈薄壳；密度最高的原点反而不在里面，随手抽的样本几乎都落在这圈薄壳上。</dd></div>
+    <div class="gi" id="g-mode"><dt class="gt">单峰与多峰</dt><dd class="gd">分布有几个"最可能的区域"。多峰分布的均值可能落在峰与峰之间概率很低的地方，比如 ±1 的均值 0。</dd></div>
+  </dl>
+
+  <p class="gsec">多个变量</p>
+  <dl class="gloss">
+    <div class="gi" id="g-joint"><dt class="gt">联合分布</dt><dd class="gd">几个量同时取某一组值的可能，比如 p(x₀, x<sub>t</sub>)。</dd></div>
+    <div class="gi" id="g-cond"><dt class="gt">条件概率与条件分布</dt><dd class="gd">已知某个量的取值时，另一个量的分布，写作 p(a | b)：竖线右边是已知的，左边是要问的。做法是只看满足条件的那部分情况，再重新凑成 100%。</dd></div>
+    <div class="gi" id="g-marg"><dt class="gt">边缘分布</dt><dd class="gd">不管其他量取什么，只看一个量的分布，做法是把各种情况按概率加起来。贝叶斯公式里的"证据"就是它。</dd></div>
+    <div class="gi" id="g-indep"><dt class="gt">独立</dt><dd class="gd">知道一个量，对另一个量没有任何信息，即 p(a | b) = p(a)。本页：ε 和 x₀ 独立；t = 1 时 x<sub>t</sub> 和 x₀ 独立。</dd></div>
+    <div class="gi" id="g-iid"><dt class="gt">独立同分布</dt><dd class="gd">数据之间互相独立，而且来自同一个分布。似然能写成"每条数据的概率连乘"，依赖的就是这个假设；重复或同源的数据多了，这个假设就不成立。</dd></div>
+    <div class="gi" id="g-condindep"><dt class="gt">条件独立</dt><dd class="gd">给定某个条件后，几个量之间互不提供信息：p(a, b | c) = p(a | c) · p(b | c)。一步同时生成很多 token、让每个位置各自抽样，就是在假设它们条件独立，会丢掉它们之间的关联。</dd></div>
+    <div class="gi" id="g-chain"><dt class="gt">链式法则</dt><dd class="gd">p(a, b) = p(a) · p(b | a)，量多时一路乘下去。它是精确成立的，不需要独立假设。大模型给整段文本算概率，就是一个 token 一个 token 乘出来的。</dd></div>
+  </dl>
+
+  <p class="gsec">贝叶斯公式</p>
+  <dl class="gloss">
+    <div class="gi" id="g-bayes"><dt class="gt">贝叶斯公式</dt><dd class="gd">p(未知 | 看到的) = p(看到的 | 未知) × p(未知) ÷ p(看到的)，即后验 = 似然 × 先验 ÷ 证据。来历：两件事同时发生的概率按两种顺序算，结果必然相等。</dd></div>
+    <div class="gi" id="g-prior"><dt class="gt">先验</dt><dd class="gd">看到数据之前，对未知量的判断。去噪层里是数据分布（±1 各半）；训练层里是对权重的预设，对应正则项。</dd></div>
+    <div class="gi" id="g-lik"><dt class="gt">似然</dt><dd class="gd">把已经看到的数据固定下来，把 p(数据 | 候选) 当作候选的函数，给每个候选打分。它不是候选的概率分布，几个分数加起来一般不是 1，只有相对大小有意义。</dd></div>
+    <div class="gi" id="g-post"><dt class="gt">后验</dt><dd class="gd">看到数据之后，对未知量的判断，等于似然乘先验再归一化。去噪层里是 p(x₀ | x<sub>t</sub>)。</dd></div>
+    <div class="gi" id="g-evid"><dt class="gt">证据（边缘似然）</dt><dd class="gd">不区分是哪个候选，看到这份数据本身的概率，是贝叶斯公式的分母。去噪层里是 p(x<sub>t</sub>)；训练层里和权重无关，训练时直接丢掉。</dd></div>
+    <div class="gi" id="g-condexp"><dt class="gt">条件期望 / 后验均值</dt><dd class="gd">已知条件下的期望。E[x₀ | x<sub>t</sub>] 就是把 x₀ 的每个可能取值按后验概率加权平均。用 MSE 训练的网络，学到的就是它。</dd></div>
+  </dl>
+
+  <p class="gsec">模型与训练</p>
+  <dl class="gloss">
+    <div class="gi" id="g-family"><dt class="gt">分布族</dt><dd class="gd">形式相同、只差几个参数的一组分布。架构决定族，权重从族里选出一个成员。</dd></div>
+    <div class="gi" id="g-param"><dt class="gt">模型参数与分布参数</dt><dd class="gd">模型参数是训练时调的数，即权重；分布参数是决定某一个具体分布的数，比如 μ、logits。有输入时，分布参数由权重和输入一起算出来，两者不是同一个东西。</dd></div>
+    <div class="gi" id="g-condlik"><dt class="gt">条件似然</dt><dd class="gd">有输入时的似然：p<sub>θ</sub>(y₁ | x₁) × … × p<sub>θ</sub>(y<sub>N</sub> | x<sub>N</sub>)。只给输出打分，输入只当条件。SFT 不计 prompt 的 loss，就是这个意思。</dd></div>
+    <div class="gi" id="g-mle"><dt class="gt">最大似然估计（MLE）</dt><dd class="gd">在分布族里找让训练数据似然最大的参数。取负对数后，就是最小化交叉熵、MSE 这类 loss。</dd></div>
+    <div class="gi" id="g-map"><dt class="gt">最大后验估计（MAP）</dt><dd class="gd">找让后验最大的参数，等于最小化"loss + 正则项"。只取后验的最高点，不保留整个后验分布。</dd></div>
+    <div class="gi" id="g-ar"><dt class="gt">自回归</dt><dd class="gd">按顺序一次生成一个元素，每个元素以前面已经生成的全部内容为条件。按链式法则，整体概率 = 每一步条件概率的连乘。LLM 就是这样生成 token 的。</dd></div>
+    <div class="gi" id="g-greedy"><dt class="gt">众数与贪心解码</dt><dd class="gd">众数是一个分布里概率（或密度）最高的那个值，也就是"最可能的那一个"。贪心解码是生成时每一步都取当前分布的众数。它给出的是最可能的结果，不是一个样本，所以没有多样性。</dd></div>
+    <div class="gi" id="g-mse"><dt class="gt">MSE（均方误差）</dt><dd class="gd">误差平方的平均。它等于"误差服从方差固定的高斯分布"时的负对数似然（差一个常数和系数）；它的最优解是条件均值。</dd></div>
+    <div class="gi" id="g-softmax"><dt class="gt">softmax 与 logits</dt><dd class="gd">logits 是网络给每个类别打的原始分数，相当于没归一化的对数概率，只有差值有意义。softmax 先对每个分数取指数，再除以总和，把它们变成类别分布。两个 logit 差 1，概率相差约 2.7 倍。</dd></div>
+  </dl>
+
+  <p class="gsec">交叉熵与 KL</p>
+  <dl class="gloss">
+    <div class="gi" id="g-empirical"><dt class="gt">经验分布</dt><dd class="gd">把训练集本身当成一个分布，每条样本占 1/N。数据越多，它越接近数据生成分布，这是大数定律的结论。</dd></div>
+    <div class="gi" id="g-datagen"><dt class="gt">数据生成分布</dt><dd class="gd">产生训练数据的那个分布：可以是现实中的语料、筛选和配比后的数据集，也可以是教师模型。最大似然逼近的就是它，连它的偏差一起。</dd></div>
+    <div class="gi" id="g-ce"><dt class="gt">交叉熵</dt><dd class="gd">H(P, Q)：按 P 的样本取平均的 −log Q。P 取经验分布时，它就是平均负对数似然。信息论里把它解释为"用 Q 给 P 的数据编码，平均需要的长度"。</dd></div>
+    <div class="gi" id="g-entropy"><dt class="gt">熵</dt><dd class="gd">一个分布自身的不确定性，H(P) = 按 P 取平均的 −log P。它是交叉熵的下限，也就是 loss 降不下去的那部分。</dd></div>
+    <div class="gi" id="g-kl"><dt class="gt">KL 散度</dt><dd class="gd">KL(P ‖ Q) = 对所有 x 求和 P(x)·log(P(x)/Q(x)) = 交叉熵 − 熵。永远不小于 0，只有两个分布完全相同时为 0，而且不对称。"‖"只是分隔，前面的分布提供样本，后面的接受检查。前向 KL(数据 ‖ 模型) 对应最大似然；反向 KL(模型 ‖ 目标) 对应带 KL 约束的强化学习。</dd></div>
+  </dl>
+
+  <p class="gsec">采样的数学</p>
+  <dl class="gloss">
+    <div class="gi" id="g-ode"><dt class="gt">常微分方程（ODE）</dt><dd class="gd">给出"每个位置、每个时刻该怎么变"，求整条轨迹。本页是 dx/dt = v(x, t)。</dd></div>
+    <div class="gi" id="g-euler"><dt class="gt">欧拉法</dt><dd class="gd">求常微分方程近似解的最简单办法：假设速度在一小段时间里不变，沿直线走一步，再重新算速度。步子越小越准。注意它不是"欧拉方程"，后者通常指流体力学或变分法里的另一组方程。</dd></div>
+    <div class="gi" id="g-velocity"><dt class="gt">速度场</dt><dd class="gd">每个位置、每个时刻的速度。本页是 v(x, t) = (x − D(x, t)) / t，等于训练时所有经过这一点的直线速度的平均。</dd></div>
+    <div class="gi" id="g-continuity"><dt class="gt">连续性方程</dt><dd class="gd">描述"一群点按速度场移动时，它们的分布怎么跟着变"：某处概率的变化 = 流进来的 − 流出去的，流量 = 密度 × 速度。Flow matching 用它证明：按平均速度走，每个时刻的分布正好是 p<sub>t</sub>。</dd></div>
+    <div class="gi" id="g-score"><dt class="gt">score</dt><dd class="gd">log 密度的梯度 ∇log p(x)，也就是"往哪个方向走，密度上升得最快"。梯度是一个函数在某点增长最快的方向和速度。</dd></div>
+    <div class="gi" id="g-tweedie"><dt class="gt">Tweedie 公式</dt><dd class="gd">对 x<sub>t</sub> = α<sub>t</sub>·x₀ + σ<sub>t</sub>·ε，有 E[x₀ | x<sub>t</sub>] = (x<sub>t</sub> + σ<sub>t</sub>²·∇log p<sub>t</sub>(x<sub>t</sub>)) / α<sub>t</sub>。后验均值可以由 score 算出来，所以"学去噪"和"学 score"是同一件事。</dd></div>
+    <div class="gi" id="g-tv"><dt class="gt">总变差</dt><dd class="gd">衡量两个分布有多大部分不重合：0 表示完全相同，100% 表示完全不重叠。</dd></div>
+    <div class="gi" id="g-kernel"><dt class="gt">核平滑</dt><dd class="gd">把每个数据点抹成一个小钟形再叠加，得到一条平滑的分布；宽度 h 越大越平滑。本页用它示意"网络没有完美拟合训练集"。</dd></div>
+    <div class="gi" id="g-memo"><dt class="gt">记忆与泛化</dt><dd class="gd">只会复现训练样本，叫记忆；能生成训练集里没有、但同样合理的样本，叫泛化。</dd></div>
+  </dl>
+</section>
+
+<section id="refs">
+  <h2><span class="n">·</span>来源</h2>
+  <ul class="refs">
+    <li>扩散与采样：Ho 等 2020，DDPM，<a href="https://arxiv.org/abs/2006.11239">2006.11239</a>；Sohl-Dickstein 等 2015（小步反向近似高斯），<a href="https://arxiv.org/abs/1503.03585">1503.03585</a>；Song 等 2020，Score SDE 与概率流 ODE，<a href="https://arxiv.org/abs/2011.13456">2011.13456</a>；Efron 2011，Tweedie's Formula and Selection Bias，JASA</li>
+    <li>Flow matching 与连续性方程：Lipman 等 2022，<a href="https://arxiv.org/abs/2210.02747">2210.02747</a>；Rectified Flow 与 reflow：Liu 等 2022，<a href="https://arxiv.org/abs/2209.03003">2209.03003</a></li>
+    <li>采样调度：Karras 等 2022，EDM，<a href="https://arxiv.org/abs/2206.00364">2206.00364</a>；Esser 等 2024，SD3，<a href="https://arxiv.org/abs/2403.03206">2403.03206</a></li>
+    <li>记忆与泛化：Somepalli 等，CVPR 2023，<a href="https://arxiv.org/abs/2212.03860">2212.03860</a>；Kadkhodaie 等，ICLR 2024，<a href="https://arxiv.org/abs/2310.02557">2310.02557</a></li>
+    <li>最大似然、交叉熵、KL：Goodfellow 等，Deep Learning <a href="https://www.deeplearningbook.org/contents/prob.html">第 3 章</a>与<a href="https://www.deeplearningbook.org/contents/ml.html">第 5 章</a>；Kristiadi，<a href="https://agustinus.kristia.de/blog/forward-reverse-kl/">KL Divergence: Forward vs Reverse?</a>；White 1982，<a href="https://faculty.utrgv.edu/diego.escobari/teaching/Econ8370/Papers/White(1982)Econometrica-Corey.pdf">Maximum Likelihood Estimation of Misspecified Models</a></li>
+    <li>先验与正则：Wilson &amp; Izmailov，NeurIPS 2020，<a href="https://arxiv.org/abs/2002.08791">2002.08791</a>；van Laarhoven 2017，<a href="https://arxiv.org/abs/1706.05350">1706.05350</a>；Andriushchenko 等 2023，<a href="https://arxiv.org/abs/2310.04415">2310.04415</a>；Loshchilov &amp; Hutter，AdamW，<a href="https://arxiv.org/abs/1711.05101">1711.05101</a></li>
+    <li>为什么不取最大值：Holtzman 等，ICLR 2020，<a href="https://arxiv.org/abs/1904.09751">1904.09751</a>；Nalisnick 等，ICLR 2019，<a href="https://arxiv.org/abs/1810.09136">1810.09136</a></li>
+    <li>泛化与创造：Kamb &amp; Ganguli，ICML 2025，<a href="https://arxiv.org/abs/2412.20292">2412.20292</a>；Okawa 等，NeurIPS 2023，<a href="https://arxiv.org/abs/2310.09336">2310.09336</a></li>
+    <li>自回归与并行生成：Gu 等 2018，非自回归翻译的多峰问题，<a href="https://arxiv.org/abs/1711.02281">1711.02281</a>；Nie 等 2025，LLaDA，<a href="https://arxiv.org/abs/2502.09992">2502.09992</a>；Li 等 2024，MAR，<a href="https://arxiv.org/abs/2406.11838">2406.11838</a></li>
+    <li>强化学习与反向 KL：Lambert，<a href="https://rlhfbook.com/c/15-regularization">RLHF Book 第 15 章</a>；Korbak 等 2022，<a href="https://arxiv.org/abs/2205.11275">2205.11275</a></li>
+  </ul>
+</section>
+
+<footer>2026 年 10 月。所有演示都在浏览器本地计算：两点例子、贝叶斯探索器、欧拉法、单步后验和记忆示意都用精确公式，没有神经网络；像素上的加噪、去噪用的是 12 张简笔画上精确的后验均值（或只看局部的版本），也没有神经网络；猫是简笔画，平均是逐像素算的。"一步蒸馏难在对应关系陡峭"一条是推断。</footer>
+</main>
+
+<script>
+(function(){
+'use strict';
+var $=function(id){return document.getElementById(id);};
+var C={ink:'#17212B',ink2:'#4C5866',muted:'#7E8894',rule:'#D3D9DC',grid:'#E4E8E9',plus:'#1F63B8',minus:'#C2306F',mean:'#9B8E7E',guess:'#D69500',guessInk:'#8F6200',noise:'#9AA5B1'};
+var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function f2(v){return (Math.round(v*100)/100).toFixed(2);}
+function f3(v){return (Math.round(v*1000)/1000).toFixed(3);}
+function pct(v){return (v*100).toFixed(1)+'%';}
+function attrs(o){var s='';for(var k in o){if(o[k]!=null)s+=' '+k+'="'+o[k]+'"';}return s;}
+function E(tag,o,inner){return '<'+tag+attrs(o)+(inner==null?'/>':'>'+inner+'</'+tag+'>');}
+function path(pts){var s='';for(var i=0;i<pts.length;i++)s+=(i?'L':'M')+pts[i][0].toFixed(1)+','+pts[i][1].toFixed(1);return s;}
+function svg(w,h,inner){return '<svg viewBox="0 0 '+w+' '+h+'" xmlns="http://www.w3.org/2000/svg">'+inner+'</svg>';}
+function txt(x,y,s,o){o=o||{};o.x=x;o.y=y;return E('text',o,s);}
+function chips(el,items,cur,on){el.innerHTML='';items.forEach(function(it){var b=document.createElement('button');b.type='button';b.textContent=it[1];b.setAttribute('aria-pressed',String(it[0]===cur));b.addEventListener('click',function(){Array.prototype.forEach.call(el.children,function(c){c.setAttribute('aria-pressed','false');});b.setAttribute('aria-pressed','true');on(it[0],true);});el.appendChild(b);});}
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+
+/* ---------- 数值核心：两点数据 ---------- */
+function invNorm(p){
+  var a=[-39.69683028665376,220.9460984245205,-275.9285104469687,138.357751867269,-30.66479806614716,2.506628277459239],
+      b=[-54.47609879822406,161.5858368580409,-155.6989798598866,66.80131188771972,-13.28068155288572],
+      c=[-0.007784894002430293,-0.3223964580411365,-2.400758277161838,-2.549732539343734,4.374664141464968,2.938163982698783],
+      d=[0.007784695709041462,0.3224671290700398,2.445134137142996,3.754408661907416],q,r;
+  if(p<0.02425){q=Math.sqrt(-2*Math.log(p));return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);}
+  if(p>1-0.02425){q=Math.sqrt(-2*Math.log(1-p));return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);}
+  q=p-0.5;r=q*q;return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q/(((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);
+}
+function qgrid(n){var e=new Float64Array(n);for(var i=0;i<n;i++)e[i]=invNorm((i+0.5)/n);return e;}
+function Dtoy(x,t){return Math.tanh((1-t)*x/(t*t));}            // t=1 时为 0
+function runToy(x,N,keep){var p=keep?[[1,x]]:null;for(var k=0;k<N;k++){var t=1-k/N,s=1-(k+1)/N;x=(s/t)*x+(1-s/t)*Dtoy(x,t);if(p)p.push([s,x]);}return keep?p:x;}
+function toyStats(eps,N){var n=eps.length,a=0,b=0,c=0,out=new Float64Array(n);for(var i=0;i<n;i++){var x=runToy(eps[i],N,false);out[i]=x;var ax=Math.abs(x);a+=ax;if(ax>0.95)b++;if(ax<0.5)c++;}return {mean:a/n,near:b/n,mid:c/n,out:out};}
+function cls(x){return x>0.5?C.plus:(x<-0.5?C.minus:C.mean);}
+// 精细路径（近似精确 ODE 解），用于第 2、3 节
+function exactPath(x1,M){return runToy(x1,M||1200,true);}
+function atT(p,t){var M=p.length-1,u=(1-t)*M,k=Math.min(M-1,Math.floor(u)),fr=u-k;return p[k][1]+(p[k+1][1]-p[k][1])*fr;}
+
+var EPS=qgrid(20000);
+var STEP_SET=[1,2,3,4,8,32];
+var cache={};
+function getN(N){if(!cache[N]){var st=toyStats(EPS,N);var tr=[],pe=qgrid(70),pp=qgrid(260);for(var i=0;i<pe.length;i++)tr.push(runToy(pe[i],N,true));var parts=[];for(i=0;i<pp.length;i++)parts.push(runToy(pp[i],N,true));
+  var bins=new Float64Array(60),lo=-1.3,hi=1.3;for(i=0;i<st.out.length;i++){var j=Math.floor((st.out[i]-lo)/(hi-lo)*60);if(j<0)j=0;if(j>59)j=59;bins[j]++;}
+  cache[N]={st:st,tr:tr,parts:parts,bins:bins};}return cache[N];}
+
+function sayFor(N,st){
+  if(N===1)return '1 步：全部落在 0。数据里只有 +1 和 −1，根本没有 0。';
+  if(N===2)return '2 步：输出恰好等于 tanh(ε)，摊在 −1 到 1 之间，半糊。只有 '+pct(st.near)+' 落在 ±1 附近。';
+  if(N===3)return '3 步：大多数已经靠近 ±1，两峰之间还剩 '+pct(st.mid)+'。';
+  if(N===4)return '4 步：'+pct(st.near)+' 落在 ±1 附近。';
+  if(N===8)return '8 步：'+pct(st.near)+' 落在 ±1 附近，几乎每个点都成了真实数据。';
+  return N+' 步：和精确的 ODE 解几乎一样。ε > 0 的点到 +1，ε < 0 的点到 −1。';
+}
+
+/* ---------- Hero：N 步采样画布 ---------- */
+(function hero(){
+  var box=$('heroBox'),cv=$('heroCv'),ctx=cv.getContext('2d');
+  var N=reduce?8:1,anim=null,touched=false,W=0,H=0,YM=2.6;
+  function size(){var w=box.clientWidth;H=w<600?300:370;W=w;var r=window.devicePixelRatio||1;cv.width=Math.round(w*r);cv.height=Math.round(H*r);cv.style.width=w+'px';cv.style.height=H+'px';ctx.setTransform(r,0,0,r,0,0);}
+  function geo(){var L=W<600?64:104,R=W<600?78:140,T=18,B=34;return {L:L,R:R,T:T,B:B,x0:L,x1:W-R,y:function(v){return T+(YM-v)/(2*YM)*(H-T-B);},tx:function(t){return L+(1-t)*(W-R-L);}};}
+  function draw(u){
+    var g=geo(),d=getN(N),i,k;
+    ctx.clearRect(0,0,W,H);
+    // 参考线
+    [[1,C.plus,'+1'],[-1,C.minus,'−1'],[0,C.mean,'0（均值）']].forEach(function(r){ctx.strokeStyle=r[1];ctx.globalAlpha=r[0]===0?.55:.45;ctx.setLineDash(r[0]===0?[2,4]:[5,5]);ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(g.x0,g.y(r[0]));ctx.lineTo(W-6,g.y(r[0]));ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=1;ctx.fillStyle=r[1];ctx.font='600 12px '+getComputedStyle(document.body).fontFamily;ctx.textAlign='right';ctx.fillText(r[2],W-6,g.y(r[0])-5);});
+    // 步的分界
+    ctx.strokeStyle=C.grid;ctx.lineWidth=1;for(k=0;k<=Math.min(N,32);k++){var tx=g.tx(1-k/N);ctx.beginPath();ctx.moveTo(tx,g.T);ctx.lineTo(tx,H-g.B);ctx.stroke();}
+    // 噪声分布（左侧，横放）
+    ctx.fillStyle='rgba(154,165,177,.35)';ctx.strokeStyle=C.noise;ctx.beginPath();var bw=g.L-18;ctx.moveTo(g.x0-6,g.y(YM));for(i=0;i<=120;i++){var v=YM-i*(2*YM/120);ctx.lineTo(g.x0-6-bw*Math.exp(-v*v/2),g.y(v));}ctx.lineTo(g.x0-6,g.y(-YM));ctx.closePath();ctx.fill();
+    ctx.fillStyle=C.ink2;ctx.font='12px '+getComputedStyle(document.body).fontFamily;ctx.textAlign='left';ctx.fillText('噪声 ε',4,g.T+10);
+    // 轨迹
+    ctx.lineWidth=1.1;for(i=0;i<d.tr.length;i++){var p=d.tr[i];ctx.strokeStyle=cls(p[p.length-1][1]);ctx.globalAlpha=.22;ctx.beginPath();for(k=0;k<p.length;k++){var X=g.tx(p[k][0]),Y=g.y(p[k][1]);if(k)ctx.lineTo(X,Y);else ctx.moveTo(X,Y);}ctx.stroke();}ctx.globalAlpha=1;
+    // 粒子
+    for(i=0;i<d.parts.length;i++){var q=d.parts[i],M=q.length-1,uu=Math.min(u,1)*M,kk=Math.min(M-1,Math.floor(uu)),fr=uu-kk;var tt=q[kk][0]+(q[kk+1][0]-q[kk][0])*fr,xx=q[kk][1]+(q[kk+1][1]-q[kk][1])*fr;ctx.fillStyle=cls(q[M][1]);ctx.globalAlpha=.8;ctx.beginPath();ctx.arc(g.tx(tt),g.y(xx),2.3,0,Math.PI*2);ctx.fill();}ctx.globalAlpha=1;
+    // 输出直方图（右侧，横放）
+    var mx=0;for(i=0;i<60;i++)mx=Math.max(mx,d.bins[i]);var hw=g.R-46,grow=Math.max(0,Math.min(1,(u-0.6)/0.4));
+    for(i=0;i<60;i++){if(!d.bins[i])continue;var c0=-1.3+(i+0.5)*(2.6/60),y0=g.y(-1.3+(i+1)*(2.6/60)),y1=g.y(-1.3+i*(2.6/60));ctx.fillStyle=cls(c0);ctx.globalAlpha=.85;ctx.fillRect(g.x1+8,y0,Math.max(1.5,hw*(d.bins[i]/mx)*grow),Math.max(1,y1-y0-0.5));}ctx.globalAlpha=1;
+    // 时间轴
+    ctx.fillStyle=C.ink2;ctx.textAlign='left';ctx.fillText('t = 1（纯噪声）',g.x0,H-10);ctx.textAlign='right';ctx.fillText('t = 0（数据）',g.x1,H-10);ctx.textAlign='left';ctx.fillText('结果',g.x1+8,g.T+10);
+  }
+  function stats(){var st=getN(N).st;$('hsA').textContent=f3(st.mean);$('hsB').textContent=pct(st.near);$('hsC').textContent=pct(st.mid);$('heroSay').textContent=sayFor(N,st);}
+  function play(done){if(anim)cancelAnimationFrame(anim);stats();if(reduce){draw(1);if(done)done();return;}var t0=null,dur=1700;function fr(ts){if(t0==null)t0=ts;var u=Math.min(1,(ts-t0)/dur);draw(u);if(u<1)anim=requestAnimationFrame(fr);else{anim=null;if(done)done();}}anim=requestAnimationFrame(fr);}
+  function setN(n,user){if(user)touched=true;N=n;play();}
+  chips($('heroChips'),STEP_SET.map(function(n){return [n,n+' 步'];}),N,setN);
+  function pressChip(n){Array.prototype.forEach.call($('heroChips').children,function(b,i){b.setAttribute('aria-pressed',String(STEP_SET[i]===n));});}
+  size();
+  play(function(){if(reduce)return;setTimeout(function(){if(touched)return;N=8;pressChip(8);play();},1000);});
+  var rt;window.addEventListener('resize',function(){clearTimeout(rt);rt=setTimeout(function(){size();if(!anim)draw(1);},120);});
+})();
+
+/* ---------- 第 1 节：表 ---------- */
+(function table(){
+  var notes={1:'全部是 0，数据里没有 0',2:'输出恰好等于 tanh(ε)，半糊',3:'大多数靠近 ±1',4:'接近九成到位',8:'几乎全部到 ±1',32:'和精确 ODE 解几乎一样'};
+  var tb=$('toyTable').querySelector('tbody'),h='';
+  STEP_SET.forEach(function(N){var st=getN(N).st;h+='<tr><td>'+N+'</td><td class="n">'+f3(st.mean)+'</td><td class="n">'+pct(st.near)+'</td><td class="n">'+pct(st.mid)+'</td><td>'+notes[N]+'</td></tr>';});
+  tb.innerHTML=h;
+})();
+
+/* ---------- 第 2 节：一条轨迹 + D(x,t) 曲线 ---------- */
+(function traj(){
+  var eps=0.8,u=0,P=exactPath(eps),bg=[],playing=null;
+  [-1.9,-1.4,-1.0,-0.6,-0.3,-0.1,0.1,0.3,0.6,1.0,1.4,1.9].forEach(function(e){bg.push(exactPath(e,600));});
+  var LW=480,LH=290,lx0=46,lx1=466,ly=function(v){return 16+(2.2-v)/4.4*(LH-46);},lt=function(t){return lx0+(1-t)*(lx1-lx0);};
+  var RW=400,RH=290,rx0=40,rx1=386,rX=function(v){return rx0+(v+2.2)/4.4*(rx1-rx0);},rY=function(v){return 16+(1.15-v)/2.3*(RH-46);};
+  function draw(){
+    var t=1-u/100;if(t<0.01)t=0.01;var xt=atT(P,t),dv=Dtoy(xt,t),pp=(1+dv)/2;
+    // 左图
+    var s='';
+    [[1,C.plus],[-1,C.minus],[0,C.mean]].forEach(function(r){s+=E('line',{x1:lx0,x2:lx1,y1:ly(r[0]),y2:ly(r[0]),stroke:r[1],'stroke-dasharray':r[0]?'5 5':'2 4','stroke-opacity':.5});});
+    bg.forEach(function(p){s+=E('path',{d:path(p.filter(function(_,i){return i%6===0||i===p.length-1;}).map(function(q){return [lt(q[0]),ly(q[1])];})),fill:'none',stroke:C.noise,'stroke-opacity':.35,'stroke-width':1});});
+    var done=[],rest=[];P.forEach(function(q,i){if(i%4&&i!==P.length-1)return;var pt=[lt(q[0]),ly(q[1])];if(q[0]>=t)done.push(pt);else rest.push(pt);});
+    if(done.length)rest.unshift(done[done.length-1]);
+    s+=E('path',{d:path(rest),fill:'none',stroke:C.ink,'stroke-opacity':.25,'stroke-width':1.5,'stroke-dasharray':'3 4'});
+    s+=E('path',{d:path(done),fill:'none',stroke:C.ink,'stroke-width':2.2});
+    s+=E('line',{x1:lt(t),x2:lt(t),y1:16,y2:LH-30,stroke:C.guess,'stroke-opacity':.6});
+    s+=E('circle',{cx:lt(t),cy:ly(xt),r:6,fill:C.ink,stroke:'#fff','stroke-width':2});
+    s+=txt(lt(t)+(t<0.25?-10:10),ly(xt)-10,'x = '+f3(xt),{'font-size':13,'font-weight':650,fill:C.ink,'text-anchor':t<0.25?'end':'start'});
+    s+=txt(lx0,LH-10,'t = 1',{'font-size':12,fill:C.ink2});s+=txt(lx1,LH-10,'t = 0',{'font-size':12,fill:C.ink2,'text-anchor':'end'});
+    s+=txt(lt(t),LH-10,'t = '+f2(t),{'font-size':12,'font-weight':650,fill:C.guessInk,'text-anchor':'middle'});
+    s+=txt(lx0-8,ly(1)+4,'+1',{'font-size':12,fill:C.plus,'text-anchor':'end'});s+=txt(lx0-8,ly(-1)+4,'−1',{'font-size':12,fill:C.minus,'text-anchor':'end'});s+=txt(lx0-8,ly(0)+4,'0',{'font-size':12,fill:C.mean,'text-anchor':'end'});
+    $('trL').innerHTML=svg(LW,LH,s);
+    // 右图
+    var r='';
+    r+=E('line',{x1:rx0,x2:rx1,y1:rY(0),y2:rY(0),stroke:C.rule});r+=E('line',{x1:rX(0),x2:rX(0),y1:16,y2:RH-30,stroke:C.rule});
+    [[1,C.plus],[-1,C.minus]].forEach(function(q){r+=E('line',{x1:rx0,x2:rx1,y1:rY(q[0]),y2:rY(q[0]),stroke:q[1],'stroke-dasharray':'5 5','stroke-opacity':.45});});
+    var flat=[[rX(-2.2),rY(0)],[rX(2.2),rY(0)]];r+=E('path',{d:path(flat),stroke:C.noise,'stroke-width':1,'stroke-dasharray':'2 3',fill:'none'});
+    var cur=[];for(var i=0;i<=220;i++){var xv=-2.2+i*4.4/220;cur.push([rX(xv),rY(Dtoy(xv,t))]);}
+    r+=E('path',{d:path(cur),stroke:C.guess,'stroke-width':2.6,fill:'none'});
+    var cx=rX(Math.max(-2.2,Math.min(2.2,xt))),cy=rY(dv);
+    r+=E('line',{x1:cx,x2:cx,y1:rY(0),y2:cy,stroke:C.ink,'stroke-dasharray':'3 3'});
+    r+=E('line',{x1:rx0,x2:cx,y1:cy,y2:cy,stroke:C.guess,'stroke-dasharray':'3 3'});
+    r+=E('circle',{cx:cx,cy:cy,r:6,fill:C.guess,stroke:'#fff','stroke-width':2});
+    r+=txt(rx0+4,cy+(dv>0.8?16:-7),'猜测 '+f3(dv),{'font-size':13,'font-weight':700,fill:C.guessInk});
+    r+=txt(cx,rY(0)+(dv>=0?16:-8),'x = '+f2(xt),{'font-size':12,fill:C.ink,'text-anchor':'middle'});
+    r+=txt(rx1,RH-10,'x →',{'font-size':12,fill:C.ink2,'text-anchor':'end'});r+=txt(rx0-6,rY(1)+4,'+1',{'font-size':12,fill:C.plus,'text-anchor':'end'});r+=txt(rx0-6,rY(-1)+4,'−1',{'font-size':12,fill:C.minus,'text-anchor':'end'});
+    r+=txt(rx1,30,t>0.97?'t ≈ 1：一条水平线':(t<0.2?'t 很小：变成台阶':'t = '+f2(t)),{'font-size':12.5,fill:C.guessInk,'text-anchor':'end','font-weight':650});
+    $('trR').innerHTML=svg(RW,RH,r);
+    $('pbP').style.width=(pp*100)+'%';$('pbM').style.width=((1-pp)*100)+'%';
+    $('pbP').textContent=pp>0.12?'来自 +1：'+Math.round(pp*100)+'%':'';$('pbM').textContent=(1-pp)>0.12?'来自 −1：'+Math.round((1-pp)*100)+'%':'';
+    $('trOut').innerHTML='t = <b>'+f2(t)+'</b>　位置 x<sub>t</sub> = <b>'+f3(xt)+'</b>　网络的猜测 E[x₀ | x<sub>t</sub>] = <b style="color:'+C.guessInk+'">'+f3(dv)+'</b>　这一刻若直接交卷（再走一步到 t = 0），输出就是这个猜测。';
+    $('trEpsV').textContent=f2(eps);$('trUV').textContent=u+'%';
+  }
+  $('trEps').addEventListener('input',function(e){eps=+e.target.value;P=exactPath(eps);draw();});
+  $('trU').addEventListener('input',function(e){u=+e.target.value;stop();draw();});
+  function stop(){if(playing){cancelAnimationFrame(playing);playing=null;$('trPlay').textContent='播放';}}
+  $('trPlay').addEventListener('click',function(){
+    if(playing){stop();return;}
+    if(u>=99)u=0;var start=u,t0=null,dur=reduce?1:4200*(1-start/99);$('trPlay').textContent='暂停';
+    function fr(ts){if(t0==null)t0=ts;var k=Math.min(1,(ts-t0)/Math.max(dur,1));u=Math.round(start+(99-start)*k);$('trU').value=u;draw();if(k<1)playing=requestAnimationFrame(fr);else{playing=null;$('trPlay').textContent='重播';}}
+    playing=requestAnimationFrame(fr);
+  });
+  draw();
+})();
+
+/* ---------- 第 3.1 节：单步反向分布（随机加噪，σ_t = 1） ---------- */
+(function step(){
+  var W=760,H=270,x0=40,x1=740,XL=-2.4,XR=2.4,st=1.0;
+  function X(v){return x0+(v-XL)/(XR-XL)*(x1-x0);}
+  function npdf(x,m,s){var z=(x-m)/s;return Math.exp(-z*z/2)/(s*Math.sqrt(2*Math.PI));}
+  function draw(){
+    var xt=+$('stX').value,j=+$('stJ').value,ss=0.97-(j/100)*0.93; // σ_s 从 0.97（一小步）到 0.04（几乎一步到底）
+    var r=ss*ss/(st*st),v=ss*ss*(1-r),sd=Math.sqrt(v);
+    var wp=1/(1+Math.exp(-2*xt/(st*st))),wm=1-wp;
+    var mp=1+r*(xt-1),mm=-1+r*(xt+1),mean=wp*mp+wm*mm;
+    var n=900,xs=[],pt=[],pa=[],pb=[],pg=[],ymax=0,tv=0,dx=(XR-XL)/n,peaks=0;
+    for(var i=0;i<=n;i++){var x=XL+i*dx,a=wp*npdf(x,mp,sd),b=wm*npdf(x,mm,sd),g=npdf(x,mean,sd);xs.push(x);pa.push(a);pb.push(b);pt.push(a+b);pg.push(g);ymax=Math.max(ymax,a+b,g);tv+=Math.abs(a+b-g)*dx;}
+    tv/=2;for(i=1;i<n;i++)if(pt[i]>pt[i-1]&&pt[i]>=pt[i+1]&&pt[i]>ymax*0.02)peaks++;
+    var Y=function(p){return H-34-(p/ymax)*(H-60);};
+    var s='';
+    s+=E('line',{x1:x0,x2:x1,y1:H-34,y2:H-34,stroke:C.rule});
+    [[-1,C.minus,'−1'],[1,C.plus,'+1'],[0,C.mean,'0']].forEach(function(q){s+=E('line',{x1:X(q[0]),x2:X(q[0]),y1:H-34,y2:H-28,stroke:q[1]});s+=txt(X(q[0]),H-14,q[2],{'font-size':12,fill:q[1],'text-anchor':'middle'});});
+    var area=[[X(XL),H-34]];for(i=0;i<=n;i+=2)area.push([X(xs[i]),Y(pt[i])]);area.push([X(XR),H-34]);
+    s+=E('path',{d:path(area)+'Z',fill:'rgba(23,33,43,.08)',stroke:'none'});
+    var la=[],lb=[],lt2=[],lg=[];for(i=0;i<=n;i+=2){la.push([X(xs[i]),Y(pa[i])]);lb.push([X(xs[i]),Y(pb[i])]);lt2.push([X(xs[i]),Y(pt[i])]);lg.push([X(xs[i]),Y(pg[i])]);}
+    s+=E('path',{d:path(la),fill:'none',stroke:C.plus,'stroke-width':1.3,'stroke-dasharray':'4 3'});
+    s+=E('path',{d:path(lb),fill:'none',stroke:C.minus,'stroke-width':1.3,'stroke-dasharray':'4 3'});
+    s+=E('path',{d:path(lt2),fill:'none',stroke:C.ink,'stroke-width':2.2});
+    s+=E('path',{d:path(lg),fill:'none',stroke:C.guess,'stroke-width':2.2,'stroke-opacity':.95});
+    s+=E('line',{x1:X(mean),x2:X(mean),y1:18,y2:H-34,stroke:C.guess,'stroke-dasharray':'2 3'});
+    s+=txt(X(mean)+6,26,'均值 '+f2(mean),{'font-size':12.5,'font-weight':700,fill:C.guessInk});
+    s+=E('line',{x1:X(xt),x2:X(xt),y1:H-40,y2:H-28,stroke:C.ink,'stroke-width':2});s+=txt(X(xt),H-44,'x<tspan dy="3" font-size="9">t</tspan>',{'font-size':12,fill:C.ink,'text-anchor':'middle'});
+    $('stSvg').innerHTML=svg(W,H,s);
+    var rel=(st*st-ss*ss)/(ss*ss);
+    var verdict=peaks>=2?'<b style="color:'+C.minus+'">两个峰</b>：均值落在两峰之间，高斯在那里采样，点是糊的':(tv<0.06?'<b style="color:'+C.plus+'">单峰，几乎就是高斯</b>：均值 + 固定方差就够了':'<b>单峰但已经变形</b>：高斯开始对不上');
+    $('stOut').innerHTML='这一步从 σ<sub>t</sub> = 1 退到 σ<sub>s</sub> = <b>'+f2(ss)+'</b>　相对步长 (σ<sub>t</sub>² − σ<sub>s</sub>²)/σ<sub>s</sub>² = <b>'+(rel>99?rel.toFixed(0):f2(rel))+'</b>　采样器的高斯与真实后验不重合的部分（<a class="g" href="#g-tv">总变差</a>）= <b>'+pct(tv)+'</b><br>'+verdict;
+    $('stXV').textContent=f2(xt);$('stJV').textContent=j<15?'一小步':(j>85?'几乎一步到底':'中等');
+  }
+  $('stX').addEventListener('input',draw);$('stJ').addEventListener('input',draw);draw();
+})();
+
+/* ---------- 第 3.3 节：配对直线 vs 流线 ---------- */
+(function flow(){
+  var W=760,H=320,x0=50,x1=720,YM=2.4,mode='pairs';
+  var Y=function(v){return 16+(YM-v)/(2*YM)*(H-50);},T=function(t){return x0+(1-t)*(x1-x0);};
+  var es=Array.prototype.slice.call(qgrid(34)),rnd=mulberry(7),pairs=es.map(function(e){return [e,rnd()<0.5?1:-1];});
+  var flows=es.map(function(e){return exactPath(e,500);}),hi=exactPath(0.8,500);
+  var caps={
+    pairs:'训练时：每个噪声 ε 和一个随机的数据点连成直线，线和线交叉成一团。网络在每个位置学的，是经过那里所有直线速度的平均。粗虚线：ε = 0.8 在训练里有一半配 +1、一半配 −1。',
+    flow:'采样时：点沿平均速度走。路径弯曲、互不交叉，ε > 0 的全部到 +1，ε < 0 的全部到 −1；粗线是 ε = 0.8 的路径。这个确定的“去向”在训练配对里并不存在。',
+    both:'叠在一起：直线是“每个人计划的路线”，弯线是“人流实际的走向”。终点的比例一样（各一半），但谁去哪个出口，由人流决定。'
+  };
+  function draw(){
+    var s='';
+    [[1,C.plus,'+1'],[-1,C.minus,'−1'],[0,C.mean,'0']].forEach(function(r){s+=E('line',{x1:x0,x2:x1,y1:Y(r[0]),y2:Y(r[0]),stroke:r[1],'stroke-opacity':.35,'stroke-dasharray':r[0]?'5 5':'2 4'});s+=txt(x1+8,Y(r[0])+4,r[2],{'font-size':12,fill:r[1]});});
+    if(mode!=='flow'){pairs.forEach(function(p){s+=E('line',{x1:T(1),y1:Y(p[0]),x2:T(0),y2:Y(p[1]),stroke:p[1]>0?C.plus:C.minus,'stroke-opacity':mode==='both'?.18:.38,'stroke-width':1});});
+      s+=E('line',{x1:T(1),y1:Y(0.8),x2:T(0),y2:Y(1),stroke:C.plus,'stroke-width':2.4,'stroke-dasharray':'6 4'});
+      s+=E('line',{x1:T(1),y1:Y(0.8),x2:T(0),y2:Y(-1),stroke:C.minus,'stroke-width':2.4,'stroke-dasharray':'6 4'});
+      if(mode==='pairs'){s+=E('rect',{x:T(0.62)-4,y:Y(0.5)-15,width:70,height:21,rx:4,fill:'#fff','fill-opacity':.92});s+=txt(T(0.62),Y(0.5),'各 50%',{'font-size':13,'font-weight':700,fill:C.ink});}}
+    if(mode!=='pairs'){flows.forEach(function(p){var e=p[p.length-1][1];s+=E('path',{d:path(p.filter(function(_,i){return i%5===0||i===p.length-1;}).map(function(q){return [T(q[0]),Y(q[1])];})),fill:'none',stroke:e>0?C.plus:C.minus,'stroke-opacity':mode==='both'?.75:.6,'stroke-width':1.2});});
+      s+=E('path',{d:path(hi.filter(function(_,i){return i%5===0||i===hi.length-1;}).map(function(q){return [T(q[0]),Y(q[1])];})),fill:'none',stroke:C.ink,'stroke-width':2.8});}
+    s+=E('circle',{cx:T(1),cy:Y(0.8),r:5,fill:C.ink});s+=txt(T(1)-8,Y(0.8)+4,'ε = 0.8',{'font-size':12,'font-weight':650,fill:C.ink,'text-anchor':'end'});
+    s+=txt(x0,H-8,'t = 1（噪声）',{'font-size':12,fill:C.ink2});s+=txt(x1,H-8,'t = 0（数据）',{'font-size':12,fill:C.ink2,'text-anchor':'end'});
+    $('fwSvg').innerHTML=svg(W+20,H,s);$('fwCap').textContent=caps[mode];
+  }
+  chips($('fwChips'),[['pairs','训练时的配对'],['flow','采样时走的路'],['both','叠在一起']],mode,function(m){mode=m;draw();});
+  draw();
+})();
+
+/* ---------- 第 4 节：波斯猫平均器 ---------- */
+(function cats(){
+  var W=240,H=180,mode='wild',K=12,cache={};
+  var FUR=['#F5F3EF','#EAD7B5','#BFC3CA','#8E97A8','#D99A62','#3A3533'],EYE=['#B8661E','#3D6FB0','#4E8A4E'];
+  var BG=['#86A874','#CDB896','#7F9EC4','#A3A3A0','#B98A5C','#C9B6CC'];
+  function shade(hex,a){var n=parseInt(hex.slice(1),16),r=n>>16,g=n>>8&255,b=n&255;function m(c){return Math.max(0,Math.min(255,Math.round(a<0?c*(1+a):c+(255-c)*a)));}return 'rgb('+m(r)+','+m(g)+','+m(b)+')';}
+  function drawCat(ctx,p){
+    var s=p.s,cx=p.cx,cy=p.cy,f=p.face,TAU=Math.PI*2;
+    ctx.fillStyle=p.bg;ctx.fillRect(0,0,W,H);ctx.fillStyle=shade(p.bg,-0.22);ctx.fillRect(0,H*0.66,W,H*0.34);
+    ctx.fillStyle='rgba(0,0,0,.18)';ctx.beginPath();ctx.ellipse(cx,cy+22*s,42*s,7*s,0,0,TAU);ctx.fill();
+    ctx.strokeStyle=shade(p.fur,-0.1);ctx.lineWidth=12*s;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(cx-f*30*s,cy+2*s);ctx.quadraticCurveTo(cx-f*60*s,cy-2*s,cx-f*52*s,cy-32*s);ctx.stroke();
+    ctx.fillStyle=p.fur;ctx.beginPath();ctx.ellipse(cx,cy,37*s,24*s,0,0,TAU);ctx.fill();
+    for(var k=0;k<7;k++){ctx.beginPath();ctx.arc(cx-30*s+k*10*s,cy-20*s+Math.sin(k)*2*s,7*s,0,TAU);ctx.fill();}
+    var hx=cx+f*31*s,hy=cy-19*s;
+    ctx.beginPath();ctx.arc(hx,hy,21*s,0,TAU);ctx.fill();
+    ctx.beginPath();ctx.moveTo(hx-16*s,hy-9*s);ctx.lineTo(hx-12*s,hy-27*s);ctx.lineTo(hx-3*s,hy-18*s);ctx.closePath();ctx.fill();
+    ctx.beginPath();ctx.moveTo(hx+16*s,hy-9*s);ctx.lineTo(hx+12*s,hy-27*s);ctx.lineTo(hx+3*s,hy-18*s);ctx.closePath();ctx.fill();
+    ctx.fillStyle=shade(p.fur,-0.06);ctx.beginPath();ctx.arc(hx+f*4*s,hy+6*s,9*s,0,TAU);ctx.fill();
+    ctx.fillStyle=p.eye;ctx.beginPath();ctx.arc(hx+f*3*s-7*s,hy-2*s,3.4*s,0,TAU);ctx.arc(hx+f*3*s+7*s,hy-2*s,3.4*s,0,TAU);ctx.fill();
+    ctx.fillStyle='#C9787A';ctx.beginPath();ctx.arc(hx+f*4*s,hy+5*s,2.2*s,0,TAU);ctx.fill();
+  }
+  function params(m){var r=mulberry(m==='wild'?11:m==='aligned'?23:37),a=[],i;
+    for(i=0;i<12;i++){
+      if(m==='wild')a.push({bg:BG[Math.floor(r()*BG.length)],cx:62+r()*116,cy:92+r()*34,s:0.7+r()*0.55,face:r()<0.5?1:-1,fur:FUR[Math.floor(r()*FUR.length)],eye:EYE[Math.floor(r()*3)]});
+      else if(m==='aligned')a.push({bg:BG[Math.floor(r()*BG.length)],cx:112,cy:112,s:1.05,face:1,fur:FUR[Math.floor(r()*FUR.length)],eye:EYE[Math.floor(r()*3)]});
+      else a.push({bg:'#CDB896',cx:112+(r()-0.5)*4,cy:112+(r()-0.5)*4,s:1.05+(r()-0.5)*0.04,face:1,fur:shade('#EAD7B5',(r()-0.5)*0.12),eye:'#B8661E'});
+    }return a;}
+  CATLIB={draw:drawCat,params:params,W:W,H:H};
+  function build(m){if(cache[m])return cache[m];var ps=params(m),imgs=[];ps.forEach(function(p){var c=document.createElement('canvas');c.width=W;c.height=H;var x=c.getContext('2d');drawCat(x,p);imgs.push({c:c,d:x.getImageData(0,0,W,H).data});});cache[m]=imgs;return imgs;}
+  var th=$('catThumbs');for(var i=0;i<12;i++){var c=document.createElement('canvas');c.width=W/2;c.height=H/2;c.setAttribute('aria-hidden','true');th.appendChild(c);}
+  var caps={
+    wild:'随手拍的照片：姿态、位置、大小、背景都不一样。平均几张之后，猫就化成一团低对比度的色块；朝左和朝右的猫叠在一起，是重影，不是一只朝正面的猫。这就是一步生成交出的“E[x | 波斯猫]”。',
+    aligned:'先对齐再平均：位置、大小、朝向一致，只有毛色和背景不同。平均后形状依然清楚，只是颜色变浑。这就是“平均脸”能看出是脸的原因：对齐去掉了姿态和位置的变化。',
+    late:'采样后期：x_t 已经把构图、姿态、背景、毛色都定下来了，剩下要平均的只有一两个像素的抖动和细微的色差。这时的条件均值，就是一张清楚的、具体的猫。多步采样是在自动做“对齐”。'
+  };
+  function draw(){
+    var imgs=build(mode),cs=th.children,j;
+    for(j=0;j<12;j++){var x=cs[j].getContext('2d');x.clearRect(0,0,W/2,H/2);x.drawImage(imgs[j].c,0,0,W,H,0,0,W/2,H/2);cs[j].classList.toggle('off',j>=K);}
+    var acc=new Float32Array(W*H*3),n=W*H,p,q;
+    for(j=0;j<K;j++){var d=imgs[j].d;for(p=0,q=0;p<n;p++,q+=4){acc[p*3]+=d[q];acc[p*3+1]+=d[q+1];acc[p*3+2]+=d[q+2];}}
+    var ax=$('catAvg').getContext('2d'),out=ax.createImageData(W,H);
+    for(p=0,q=0;p<n;p++,q+=4){out.data[q]=acc[p*3]/K;out.data[q+1]=acc[p*3+1]/K;out.data[q+2]=acc[p*3+2]/K;out.data[q+3]=255;}
+    ax.putImageData(out,0,0);
+    $('catKV').textContent=K;$('catCap').textContent=caps[mode];
+  }
+  chips($('catChips'),[['wild','随手拍的照片'],['aligned','先对齐再平均'],['late','采样后期：构图已定']],mode,function(m){mode=m;draw();});
+  $('catK').addEventListener('input',function(e){K=+e.target.value;draw();});
+  draw();
+})();
+
+/* ---------- 第 4 节：记忆 vs 泛化 ---------- */
+(function mem(){
+  var MU=[-1.55,-0.85,-0.15,0.6,1.4],W=760,H=250,x0=30,x1=740,XL=-2.2,XR=2.2,NB=132;
+  var EP=qgrid(3000),TG=[];for(var k=0;k<=220;k++){var u=1-k/220;TG.push(u*u);}
+  function X(v){return x0+(v-XL)/(XR-XL)*(x1-x0);}
+  function D(x,t,h){var a=1-t,v=a*a*h*h+t*t,g=a*h*h/v,mx=-Infinity,ls=[],i;for(i=0;i<MU.length;i++){var d=x-a*MU[i],l=-d*d/(2*v);ls.push(l);if(l>mx)mx=l;}var Z=0,S=0;for(i=0;i<MU.length;i++){var w=Math.exp(ls[i]-mx);Z+=w;S+=w*(MU[i]+g*(x-a*MU[i]));}return S/Z;}
+  function sample(e,h){var x=e;for(var k=0;k<TG.length-1;k++){var t=TG[k],s=TG[k+1];x=(s/t)*x+(1-s/t)*D(x,t,h);}return x;}
+  function draw(){
+    var h=+$('memH').value,bins=new Float64Array(NB),fresh=0,i;
+    for(i=0;i<EP.length;i++){var x=sample(EP[i],h),j=Math.floor((x-XL)/(XR-XL)*NB);if(j>=0&&j<NB)bins[j]++;var md=Infinity;for(var m=0;m<MU.length;m++)md=Math.min(md,Math.abs(x-MU[m]));if(md>0.05)fresh++;}
+    var mx=0;for(i=0;i<NB;i++)mx=Math.max(mx,bins[i]);
+    var base=H-40,top=22,s='';
+    s+=E('line',{x1:x0,x2:x1,y1:base,y2:base,stroke:C.rule});
+    if(h>0){var cur=[];for(i=0;i<=400;i++){var xv=XL+i*(XR-XL)/400,pv=0;for(var m2=0;m2<MU.length;m2++){var z=(xv-MU[m2])/h;pv+=Math.exp(-z*z/2);}cur.push([X(xv),pv]);}var pm=0;cur.forEach(function(c){pm=Math.max(pm,c[1]);});s+=E('path',{d:path(cur.map(function(c){return [c[0],base-(c[1]/pm)*(base-top)*0.9];})),fill:'none',stroke:C.noise,'stroke-width':1.2,'stroke-dasharray':'3 3'});}
+    var bw=(x1-x0)/NB;
+    for(i=0;i<NB;i++){if(!bins[i])continue;var hh=(bins[i]/mx)*(base-top);var cc=XL+(i+0.5)*(XR-XL)/NB,md2=Infinity;for(var m3=0;m3<MU.length;m3++)md2=Math.min(md2,Math.abs(cc-MU[m3]));
+      s+=E('rect',{x:(x0+i*bw).toFixed(1),y:(base-hh).toFixed(1),width:Math.max(1,bw-0.6).toFixed(1),height:hh.toFixed(1),fill:md2>0.05?C.guess:C.ink,'fill-opacity':md2>0.05?.85:.75});}
+    MU.forEach(function(m,k2){s+=E('path',{d:'M'+X(m)+','+(base+4)+' l-6,10 h12 Z',fill:C.ink});s+=txt(X(m),base+28,'训练图 '+(k2+1),{'font-size':11.5,fill:C.ink2,'text-anchor':'middle'});});
+    $('memSvg').innerHTML=svg(W,H,s);
+    $('memHV').textContent=f2(h);
+    $('memOut').innerHTML='3000 次采样中，离最近训练点超过 0.05 的输出（新样本，橙色）：<b>'+pct(fresh/EP.length)+'</b>　'+(h===0?'h = 0：每次都正好落回某张训练图上，这就是记忆。':'h = '+f2(h)+'：输出散开在训练点周围，出现了训练集里没有的新样本。虚线是平滑后的分布。');
+  }
+  $('memH').addEventListener('input',draw);draw();
+})();
+
+
+/* ---------- 第 3 节：贝叶斯探索器 ---------- */
+(function bayes(){
+  if(!$('bySvg'))return;
+  var W=760,H=300,x0=48,x1=744,XL=-2.6,XR=2.6,mode='lik';
+  function X(v){return x0+(v-XL)/(XR-XL)*(x1-x0);}
+  function npdf(x,m,s){var z=(x-m)/s;return Math.exp(-z*z/2)/(s*Math.sqrt(2*Math.PI));}
+  var caps={
+    prob:'<b>概率</b>：固定 x₀ = +1，看 x<sub>t</sub> 落在各处的可能，就是蓝色曲线。阴影是它下面的面积，正好是 1。玫红曲线是 x₀ = −1 时的同一件事。',
+    lik:'<b>似然</b>：固定已经看到的 x<sub>t</sub>（竖线），读出竖线和两条曲线交点的高度。这两个高度就是两个候选答案的似然，加起来一般不是 1。',
+    post:'<b>后验与证据</b>：黑线在竖线处的高度是证据 p(x<sub>t</sub>)，等于两个似然按先验（各 50%）加权平均。后验 = 似然 × 先验 ÷ 证据，就是下面色条里的两个比例。'
+  };
+  function draw(){
+    var t=+$('byT').value,xt=+$('byX').value,a=1-t;
+    var Lp=npdf(xt,a,t),Lm=npdf(xt,-a,t),ev=0.5*Lp+0.5*Lm,pp=0.5*Lp/ev,pm=1-pp,mean=pp-pm;
+    var peak=1/(t*Math.sqrt(2*Math.PI)),ymax=Math.max(peak,0.6)*1.1;
+    var base=H-34,top=18;
+    function Y(p){return base-(p/ymax)*(base-top);}
+    var s='',i,n=360,cp=[],cm=[],ce=[];
+    for(i=0;i<=n;i++){var xv=XL+i*(XR-XL)/n,a1=npdf(xv,a,t),a2=npdf(xv,-a,t);cp.push([X(xv),Y(a1)]);cm.push([X(xv),Y(a2)]);ce.push([X(xv),Y(0.5*a1+0.5*a2)]);}
+    s+=E('line',{x1:x0,x2:x1,y1:base,y2:base,stroke:C.rule});
+    for(var g=0.5;g<ymax;g+=0.5){s+=E('line',{x1:x0,x2:x1,y1:Y(g),y2:Y(g),stroke:g===1?C.ink2:C.grid,'stroke-dasharray':g===1?'4 4':null,'stroke-opacity':g===1?.5:1});s+=txt(x0-6,Y(g)+4,String(g),{'font-size':11,fill:g===1?C.ink2:C.muted,'text-anchor':'end'});}
+    if(ymax>1.05)s+=txt(x1,Y(1)-5,'密度 = 1',{'font-size':11.5,fill:C.ink2,'text-anchor':'end'});
+    if(mode==='prob'){var ar=[[X(XL),base]].concat(cp,[[X(XR),base]]);s+=E('path',{d:path(ar)+'Z',fill:'rgba(31,99,184,.13)',stroke:'none'});s+=txt(X(a),Y(peak)-8,'面积 = 1',{'font-size':12.5,'font-weight':700,fill:C.plus,'text-anchor':'middle'});}
+    s+=E('path',{d:path(cp),fill:'none',stroke:C.plus,'stroke-width':mode==='prob'?2.6:1.8});
+    s+=E('path',{d:path(cm),fill:'none',stroke:C.minus,'stroke-width':1.8,'stroke-opacity':mode==='prob'?.55:1});
+    s+=E('path',{d:path(ce),fill:'none',stroke:C.ink,'stroke-width':mode==='post'?2.6:1.6,'stroke-dasharray':mode==='post'?null:'5 4'});
+    [[-1,C.minus,'−1 的中心 −(1−t)'],[1,C.plus,'+1 的中心 1−t']].forEach(function(q){var cx=X(q[0]*a);s+=E('line',{x1:cx,x2:cx,y1:base,y2:base+5,stroke:q[1]});});
+    s+=txt(X(0),base+18,'0',{'font-size':11.5,fill:C.muted,'text-anchor':'middle'});
+    s+=txt(x1,base+18,'x →',{'font-size':11.5,fill:C.ink2,'text-anchor':'end'});
+    var vx=X(xt);
+    if(mode!=='prob'){
+      s+=E('line',{x1:vx,x2:vx,y1:top,y2:base,stroke:C.guess,'stroke-width':1.6});
+      s+=E('circle',{cx:vx,cy:Y(Lp),r:5.5,fill:C.plus,stroke:'#fff','stroke-width':2});
+      s+=E('circle',{cx:vx,cy:Y(Lm),r:5.5,fill:C.minus,stroke:'#fff','stroke-width':2});
+      var right=xt<1.4;
+      s+=txt(vx+(right?9:-9),Y(Lp)+(Lp>=Lm?-6:14),f3(Lp),{'font-size':12.5,'font-weight':700,fill:C.plus,stroke:'#fff','stroke-width':3,'paint-order':'stroke','text-anchor':right?'start':'end'});
+      s+=txt(vx+(right?9:-9),Y(Lm)+(Lm>Lp?-6:14),f3(Lm),{'font-size':12.5,'font-weight':700,fill:C.minus,stroke:'#fff','stroke-width':3,'paint-order':'stroke','text-anchor':right?'start':'end'});
+      if(mode==='post'){s+=E('circle',{cx:vx,cy:Y(ev),r:5,fill:C.ink,stroke:'#fff','stroke-width':2});s+=txt(vx+(right?9:-9),Y(ev)+4,'证据 '+f3(ev),{'font-size':12.5,'font-weight':700,fill:C.ink,stroke:'#fff','stroke-width':3,'paint-order':'stroke','text-anchor':right?'start':'end'});}
+    }
+    $('bySvg').innerHTML=svg(W,H,s);
+    $('byPP').style.width=(pp*100)+'%';$('byPM').style.width=(pm*100)+'%';
+    $('byPP').textContent=pp>0.14?'后验 x₀ = +1：'+Math.round(pp*100)+'%':'';
+    $('byPM').textContent=pm>0.14?'x₀ = −1：'+Math.round(pm*100)+'%':'';
+    $('byOut').innerHTML=
+      '<a class="g" href="#g-lik">似然</a>　p(x<sub>t</sub> | +1) = <b style="color:'+C.plus+'">'+f3(Lp)+'</b>，p(x<sub>t</sub> | −1) = <b style="color:'+C.minus+'">'+f3(Lm)+'</b>，两者相加 = '+f3(Lp+Lm)+'（不需要等于 1）<br>'+
+      '<a class="g" href="#g-prior">先验</a>　+1 和 −1 各 50%　　<a class="g" href="#g-evid">证据</a>　p(x<sub>t</sub>) = 0.5 × '+f3(Lp)+' + 0.5 × '+f3(Lm)+' = <b>'+f3(ev)+'</b><br>'+
+      '<a class="g" href="#g-post">后验</a>　P(+1 | x<sub>t</sub>) = 0.5 × '+f3(Lp)+' ÷ '+f3(ev)+' = <b>'+pct(pp)+'</b>　　<a class="g" href="#g-condexp">后验均值</a> = '+pct(pp)+' × (+1) + '+pct(pm)+' × (−1) = <b style="color:'+C.guessInk+'">'+f3(mean)+'</b>';
+    $('byCap').innerHTML=caps[mode];
+    $('byTV').textContent=f2(t);$('byXV').textContent=f2(xt);
+  }
+  chips($('byChips'),[['prob','概率：固定 x₀，看曲线'],['lik','似然：固定 x_t，看竖线'],['post','后验与证据']].map(function(c){return [c[0],c[1].replace('x_t','xₜ')];}),mode,function(m){mode=m;draw();});
+  $('byT').addEventListener('input',draw);$('byX').addEventListener('input',draw);
+  draw();
+})();
+
+/* ---------- 第 9 节：欧拉法 ---------- */
+(function euler(){
+  if(!$('euSvg'))return;
+  var W=760,H=300,lx0=56,lx1=690,YM=2.3,N=2,eps=0.8;
+  function T(t){return lx0+(1-t)*(lx1-lx0);}
+  function Y(v){return 16+(YM-v)/(2*YM)*(H-50);}
+  function draw(){
+    var ex=exactPath(eps,1500),eu=runToy(eps,N,true),s='',k;
+    [[1,C.plus,'+1'],[-1,C.minus,'−1'],[0,C.mean,'0']].forEach(function(r){s+=E('line',{x1:lx0,x2:lx1,y1:Y(r[0]),y2:Y(r[0]),stroke:r[1],'stroke-opacity':.4,'stroke-dasharray':r[0]?'5 5':'2 4'});s+=txt(lx1+8,Y(r[0])+4,r[2],{'font-size':12,fill:r[1]});});
+    for(k=0;k<=N;k++){var tt=1-k/N;s+=E('line',{x1:T(tt),x2:T(tt),y1:16,y2:H-34,stroke:C.grid});}
+    s+=E('path',{d:path(ex.filter(function(_,i){return i%6===0||i===ex.length-1;}).map(function(q){return [T(q[0]),Y(q[1])];})),fill:'none',stroke:C.ink,'stroke-width':1.8});
+    var guesses=[];
+    for(k=0;k<N;k++){var t0=eu[k][0],xk=eu[k][1],D=Dtoy(xk,t0);guesses.push(D);
+      s+=E('line',{x1:T(t0),y1:Y(xk),x2:T(0),y2:Y(D),stroke:C.guess,'stroke-opacity':.45,'stroke-width':1.3,'stroke-dasharray':'5 4'});
+      s+=E('circle',{cx:T(0),cy:Y(D),r:3.5,fill:'none',stroke:C.guess,'stroke-width':1.5});}
+    s+=E('path',{d:path(eu.map(function(q){return [T(q[0]),Y(q[1])];})),fill:'none',stroke:C.guess,'stroke-width':2.6});
+    eu.forEach(function(q,i){s+=E('circle',{cx:T(q[0]),cy:Y(q[1]),r:i===eu.length-1?6:4.5,fill:i===eu.length-1?C.guessInk:C.guess,stroke:'#fff','stroke-width':1.6});});
+    var fin=eu[eu.length-1][1],exf=ex[ex.length-1][1];
+    s+=txt(T(0)-10,Y(fin)+(fin>exf?-10:16),'输出 '+f3(fin),{'font-size':12.5,'font-weight':700,fill:C.guessInk,stroke:'#fff','stroke-width':3,'paint-order':'stroke','text-anchor':'end'});
+    s+=txt(lx0,H-10,'t = 1（噪声）',{'font-size':12,fill:C.ink2});s+=txt(lx1,H-10,'t = 0（数据）',{'font-size':12,fill:C.ink2,'text-anchor':'end'});
+    s+=E('circle',{cx:T(1),cy:Y(eps),r:4.5,fill:C.ink});
+    $('euSvg').innerHTML=svg(W+24,H,s);
+    $('euOut').innerHTML='每一步的猜测 D：'+guesses.map(function(g,i){return '第 '+(i+1)+' 步 <b>'+f3(g)+'</b>';}).join('，')+'<br>'+N+' 步欧拉法的输出 = 最后一次猜测 = <b style="color:'+C.guessInk+'">'+f3(fin)+'</b>　精确轨迹的终点 = <b>'+f3(exf)+'</b>'+(N===1?'　只走 1 步时，唯一一次猜测发生在 t = 1，后验就是先验，猜测必然是 0。':'');
+    $('euEpsV').textContent=f2(eps);
+  }
+  chips($('euChips'),[1,2,3,4,8].map(function(n){return [n,n+' 步'];}),N,function(n){N=n;draw();});
+  $('euEps').addEventListener('input',function(e){eps=+e.target.value;draw();});
+  draw();
+})();
+
+/* ---------- 术语悬浮释义 ---------- */
+(function gloss(){
+  var pop=document.createElement('div');pop.id='gpop';pop.setAttribute('role','tooltip');document.body.appendChild(pop);
+  var hideT=null,cur=null;
+  function show(a){
+    var id=(a.getAttribute('href')||'').slice(1),d=document.getElementById(id);if(!d)return;
+    var dt=d.querySelector('.gt'),dd=d.querySelector('.gd');if(!dt||!dd)return;
+    pop.innerHTML='<span class="gh">'+dt.innerHTML+'</span>'+dd.innerHTML;
+    pop.classList.add('on');cur=a;
+    var r=a.getBoundingClientRect(),pw=pop.offsetWidth,ph=pop.offsetHeight,sx=window.pageXOffset,sy=window.pageYOffset,vw=document.documentElement.clientWidth;
+    var left=Math.min(Math.max(8,r.left+sx),sx+vw-pw-8),topY=r.bottom+sy+6;
+    if(r.bottom+ph+12>window.innerHeight&&r.top-ph-8>0)topY=r.top+sy-ph-6;
+    pop.style.left=left+'px';pop.style.top=topY+'px';
+  }
+  function hideSoon(){clearTimeout(hideT);hideT=setTimeout(function(){pop.classList.remove('on');cur=null;},160);}
+  function find(e){var n=e.target;while(n&&n!==document){if(n.tagName==='A'&&n.classList&&n.classList.contains('g')&&!pop.contains(n))return n;n=n.parentNode;}return null;}
+  document.addEventListener('mouseover',function(e){var a=find(e);if(a){clearTimeout(hideT);if(a!==cur)show(a);}});
+  document.addEventListener('mouseout',function(e){if(find(e))hideSoon();});
+  document.addEventListener('focusin',function(e){var a=find(e);if(a){clearTimeout(hideT);show(a);}});
+  document.addEventListener('focusout',function(e){if(find(e))hideSoon();});
+  pop.addEventListener('mouseenter',function(){clearTimeout(hideT);});
+  pop.addEventListener('mouseleave',hideSoon);
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'){pop.classList.remove('on');cur=null;}});
+  window.addEventListener('scroll',function(){if(cur&&pop.classList.contains('on')){var r=cur.getBoundingClientRect();if(r.bottom<0||r.top>window.innerHeight){pop.classList.remove('on');cur=null;}}},{passive:true});
+})();
+
+
+/* ---------- 第 11 节：在像素上看一遍（精确的经验后验均值） ---------- */
+var CATLIB;
+(function imgdemo(){
+  if(!$('imProc')||!CATLIB)return;
+  var SW=64,SH=48,NP=SW*SH,DIM=NP*3;
+  var P=CATLIB.params('wild'),X=[];
+  P.forEach(function(p){
+    var c=document.createElement('canvas');c.width=CATLIB.W;c.height=CATLIB.H;CATLIB.draw(c.getContext('2d'),p);
+    var s=document.createElement('canvas');s.width=SW;s.height=SH;var sx=s.getContext('2d');sx.imageSmoothingEnabled=true;sx.drawImage(c,0,0,SW,SH);
+    var d=sx.getImageData(0,0,SW,SH).data,v=new Float32Array(DIM);
+    for(var k=0,q=0;k<NP;k++,q+=4){v[k*3]=d[q]/127.5-1;v[k*3+1]=d[q+1]/127.5-1;v[k*3+2]=d[q+2]/127.5-1;}
+    X.push(v);
+  });
+  var M=X.length,MEAN=new Float32Array(DIM);
+  X.forEach(function(v){for(var k=0;k<DIM;k++)MEAN[k]+=v[k]/M;});
+  function gauss(g){var u=0;while(u===0)u=g();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*g());}
+  function noise(seed){var g=mulberry(seed*7919+13),e=new Float32Array(DIM);for(var k=0;k<DIM;k++)e[k]=gauss(g);return e;}
+  var MODE='exact';
+  function denoise(x,t){return MODE==='exact'?denoiseExact(x,t):denoiseLocal(x,t,MODE);}
+  function denoiseExact(x,t){
+    var w=new Array(M),i,k;
+    if(t>=1){for(i=0;i<M;i++)w[i]=1/M;return {D:MEAN.slice(),w:w};}
+    var a=1-t,mx=-Infinity;
+    for(i=0;i<M;i++){var s=0,xi=X[i];for(k=0;k<DIM;k++){var d=x[k]-a*xi[k];s+=d*d;}w[i]=-s/(2*t*t);if(w[i]>mx)mx=w[i];}
+    var Z=0;for(i=0;i<M;i++){w[i]=Math.exp(w[i]-mx);Z+=w[i];}for(i=0;i<M;i++)w[i]/=Z;
+    var D=new Float32Array(DIM);for(i=0;i<M;i++){if(w[i]<1e-7)continue;var xj=X[i],wi=w[i];for(k=0;k<DIM;k++)D[k]+=wi*xj[k];}
+    return {D:D,w:w};
+  }
+  function denoiseLocal(x,t,r){
+    if(t>=1)return denoiseExact(x,t);
+    var a=1-t,inv=1/(2*t*t),W1=SW+1,LW=new Array(M),i,k,ch,yy,xx;
+    for(i=0;i<M;i++){
+      var xi=X[i],e=new Float64Array(W1*(SH+1));
+      for(yy=0;yy<SH;yy++){var row=0;for(xx=0;xx<SW;xx++){var p=yy*SW+xx,q=0;for(ch=0;ch<3;ch++){var d=x[p*3+ch]-a*xi[p*3+ch];q+=d*d;}row+=q;e[(yy+1)*W1+xx+1]=e[yy*W1+xx+1]+row;}}
+      var lw=new Float32Array(NP);
+      for(yy=0;yy<SH;yy++){var y0=Math.max(0,yy-r),y1=Math.min(SH,yy+r+1);for(xx=0;xx<SW;xx++){var x0=Math.max(0,xx-r),x1=Math.min(SW,xx+r+1);lw[yy*SW+xx]=-(e[y1*W1+x1]-e[y0*W1+x1]-e[y1*W1+x0]+e[y0*W1+x0])*inv;}}
+      LW[i]=lw;
+    }
+    var D=new Float32Array(DIM),avg=0,ws=new Array(M);
+    for(k=0;k<NP;k++){
+      var mx=-Infinity,Z=0,wm=0;for(i=0;i<M;i++)if(LW[i][k]>mx)mx=LW[i][k];
+      for(i=0;i<M;i++){ws[i]=Math.exp(LW[i][k]-mx);Z+=ws[i];}
+      for(i=0;i<M;i++){var wi=ws[i]/Z;if(wi>wm)wm=wi;if(wi<1e-7)continue;var xj=X[i];for(ch=0;ch<3;ch++)D[k*3+ch]+=wi*xj[k*3+ch];}
+      avg+=wm;
+    }
+    return {D:D,w:[avg/NP]};
+  }
+  function run(seed,N,keep){
+    var x=noise(seed),fr=[];
+    for(var k=0;k<N;k++){
+      var t=1-k/N,s=1-(k+1)/N,r=denoise(x,t);
+      if(keep)fr.push({t:t,x:x,D:r.D,w:Math.max.apply(null,r.w)});
+      var nx=new Float32Array(DIM),c1=s/t,c2=1-s/t;for(var j=0;j<DIM;j++)nx[j]=c1*x[j]+c2*r.D[j];x=nx;
+    }
+    return keep?{frames:fr,out:x}:x;
+  }
+  function nearest(v){var b=-1,bd=Infinity;for(var i=0;i<M;i++){var s=0,xi=X[i];for(var k=0;k<DIM;k++){var d=v[k]-xi[k];s+=d*d;}if(s<bd){bd=s;b=i;}}return {i:b,rms:Math.sqrt(bd/DIM)};}
+  function cv(v,cls){var c=document.createElement('canvas');c.width=SW;c.height=SH;if(cls)c.className=cls;var g=c.getContext('2d'),im=g.createImageData(SW,SH);
+    for(var k=0,q=0;k<NP;k++,q+=4){for(var ch=0;ch<3;ch++){var u=(v[k*3+ch]+1)*127.5;im.data[q+ch]=u<0?0:u>255?255:u;}im.data[q+3]=255;}
+    g.putImageData(im,0,0);return c;}
+  function cell(v,label,cls){var d=document.createElement('div');d.className='imc'+(cls?' '+cls:'');d.appendChild(cv(v));if(label!=null){var l=document.createElement('div');l.className='lb';l.innerHTML=label;d.appendChild(l);}return d;}
+  // 加噪条
+  (function fwd(){var el=$('imFwd'),x0=X[3],e=noise(99);el.style.setProperty('--n',5);
+    [0,0.25,0.5,0.75,1].forEach(function(t){var v=new Float32Array(DIM);for(var k=0;k<DIM;k++)v[k]=(1-t)*x0[k]+t*e[k];el.appendChild(cell(v,'t = '+t));});})();
+  // 去噪过程
+  var N=8,seed=1;
+  function proc(){
+    var R=run(seed,N,true),fr=R.frames,show=[],k;
+    if(N<=7){for(k=0;k<N;k++)show.push(k);}else{for(k=0;k<6;k++)show.push(Math.round(k*(N-1)/6));show.push(N-1);}
+    var el=$('imProc');el.innerHTML='';
+    var n=show.length+1,r1=document.createElement('div'),r2=document.createElement('div');
+    r1.className='imgstrip';r2.className='imgstrip';r1.style.setProperty('--n',n);r2.style.setProperty('--n',n);
+    show.forEach(function(k){var f=fr[k];r1.appendChild(cell(f.x,'t = '+f2(f.t)));r2.appendChild(cell(f.D,Math.round(f.w*100)+'%','guess'));});
+    var nn=nearest(R.out);
+    r1.appendChild(cell(R.out,'输出','out'));
+    var tr=document.createElement('div');tr.className='imc';tr.appendChild(cv(X[nn.i]));var tl=document.createElement('div');tl.className='lb';tl.innerHTML=nn.rms<0.02?'和第 '+(nn.i+1)+' 张训练图一致':'新图，最接近第 '+(nn.i+1)+' 张';tr.appendChild(tl);r2.appendChild(tr);
+    var h1=document.createElement('p');h1.className='rowlab';h1.innerHTML='上排：每一步开始时的位置 x<sub>t</sub>（'+(N>7?'共 '+N+' 步，只显示其中 7 步；':'')+'最后一格是输出）';
+    var h2=document.createElement('p');h2.className='rowlab';h2.innerHTML=MODE==='exact'?'下排：这一步的猜测 D，也就是后验均值。百分比是后验里占比最大的那只猫的权重（最后一格是最接近输出的训练图）':'下排：这一步的猜测 D。局部去噪器在每个位置只看周围一小块，百分比是"每个位置上占比最大的那张图的权重"的平均（最后一格是最接近输出的训练图）';
+    el.appendChild(h1);el.appendChild(r1);el.appendChild(h2);el.appendChild(r2);
+    $('imCap').innerHTML=N===1?'只走 1 步：唯一一次猜测发生在 t = 1，12 只猫各占 1/12，猜测就是它们的逐像素平均，输出就是这张糊图。':(MODE==='exact'?(N+' 步：下排的猜测从平均图开始，占比最大的那只猫的权重一步步升高，最后锁定一只猫。'):(N+' 步（局部去噪器）：每个位置分别从训练图里挑"局部最像"的小块，不同位置可以挑不同的猫，拼出一张训练集里没有的图。'));
+  }
+  chips($('imChips'),[1,2,4,8,20,50].map(function(n){return [n,n+' 步'];}),N,function(n){N=n;proc();});
+  $('imSeed').addEventListener('click',function(){seed+=1;proc();});
+  proc();
+  // 多样性网格
+  function drawGrid(){
+    var el=$('imGrid'),rows=[1,2,8,50],seeds=[1,2,3,4,5,6],summ=[];el.innerHTML='';
+    rows.forEach(function(n){
+      var row=document.createElement('div');row.className='imrow';
+      var lab=document.createElement('div');lab.className='rl';lab.textContent=n+' 步';row.appendChild(lab);
+      var ids={},ghost=0,fresh=0;
+      seeds.forEach(function(sd){var o=run(sd,n,false),nn=nearest(o);ids[nn.i]=1;if(nn.rms>0.01)ghost++;if(nn.rms>0.05)fresh++;row.appendChild(cell(o,null));});
+      var kinds=Object.keys(ids).length;
+      summ.push(n+' 步：'+(n===1?'6 张完全一样，都是平均图':(MODE!=='exact'?('6 张里有 '+fresh+' 张是训练集里没有的新图'):(kinds===seeds.length&&!ghost?'6 个噪声得到 6 只不同的猫':('输出集中在 '+kinds+' 只猫上'+(ghost?'，其中 '+ghost+' 张还带着别的猫的残影':''))))));
+      el.appendChild(row);
+    });
+    $('imGridCap').textContent='每行用的是同样的 6 个初始噪声'+(MODE==='exact'?'，去噪器是精确的。':'，去噪器是局部的（'+(2*MODE+1)+'×'+(2*MODE+1)+'）。')+summ.join('；')+'。';
+  }
+  drawGrid();
+  chips($('imMode'),[['exact','精确（只会背）'],[3,'局部 7×7'],[6,'局部 13×13']],MODE,function(m){MODE=m;proc();drawGrid();});
+})();
+
+
+/* ---------- 第 14 节：取最大 vs 抽样 ---------- */
+(function maxA(){
+  if(!$('mxASvg'))return;
+  var sc='two',p=0.6,seed=1,W=760,H=250;
+  function cats(){return sc==='two'?[['+1',p,C.plus],['−1',1-p,C.minus]]:[['很',0.40,C.plus],['不错',0.35,C.minus],['怎么样',0.25,C.guess]];}
+  function draw(){
+    var cs=cats(),K=cs.length,n=200,g=mulberry(seed*104729+7),cnt=[],i,k;
+    for(k=0;k<K;k++)cnt.push(0);
+    for(i=0;i<n;i++){var u=g(),acc=0;for(k=0;k<K;k++){acc+=cs[k][1];if(u<acc||k===K-1){cnt[k]++;break;}}}
+    var best=0;for(k=1;k<K;k++)if(cs[k][1]>cs[best][1])best=k;
+    var groups=[
+      ['模型给出的分布',cs.map(function(c){return c[1];}),null],
+      ['每次抽一个样本（200 次）',cnt.map(function(c){return c/n;}),cnt],
+      ['每次取最可能的（200 次）',cs.map(function(c,j){return j===best?1:0;}),cs.map(function(c,j){return j===best?n:0;})]
+    ];
+    var gx=[30,280,530],gw=210,base=H-44,top=40,s='';
+    groups.forEach(function(G,gi){
+      var x0=gx[gi],slot=gw/K,bw=slot-14;
+      s+=txt(x0+gw/2,18,G[0],{'text-anchor':'middle','font-size':15,'font-weight':650,fill:C.ink});
+      s+=E('line',{x1:x0,x2:x0+gw,y1:base,y2:base,stroke:C.rule});
+      for(k=0;k<K;k++){
+        var v=G[1][k],h=v*(base-top),bx=x0+k*slot+7;
+        if(h>0)s+=E('rect',{x:bx,y:base-h,width:bw,height:h,rx:3,fill:cs[k][2],'fill-opacity':gi===0?.3:.85,stroke:cs[k][2]});
+        s+=txt(bx+bw/2,base-h-6,G[2]?G[2][k]+' 次':Math.round(v*100)+'%',{'text-anchor':'middle','font-size':14,fill:C.ink2});
+        s+=txt(bx+bw/2,base+20,cs[k][0],{'text-anchor':'middle','font-size':15,fill:cs[k][2],'font-weight':650});
+      }
+    });
+    $('mxASvg').innerHTML=svg(W,H,s);
+    var others=cs.filter(function(c,j){return j!==best;}).map(function(c){return '"'+c[0]+'"';}).join('、');
+    $('mxAOut').innerHTML='抽样：200 次里 '+cnt.map(function(c,j){return '"'+cs[j][0]+'" '+c+' 次';}).join('，')+'，比例接近模型给出的分布。<br>取最可能的：200 次全是"'+cs[best][0]+'"，'+others+'一次都不会出现。';
+    $('mxAPV').textContent=Math.round(p*100)+'%';
+    $('mxAPWrap').style.display=sc==='two'?'':'none';
+  }
+  chips($('mxAChips'),[['two','两点数据'],['tok','下一个 token（"今天天气"之后）']],sc,function(m){sc=m;draw();});
+  $('mxAP').addEventListener('input',function(e){p=+e.target.value;draw();});
+  $('mxASeed').addEventListener('click',function(){seed++;draw();});
+  draw();
+})();
+
+/* ---------- 第 14 节：高维里最可能的点不像样本 ---------- */
+(function maxB(){
+  if(!$('mxBSvg'))return;
+  var d=9216,W=760,H=270,x0=44,x1=740;
+  function lgam(z){var c=[0.99999999999980993,676.5203681218851,-1259.1392167224028,771.32342877765313,-176.61502916214059,12.507343278686905,-0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+    if(z<0.5)return Math.log(Math.PI/Math.sin(Math.PI*z))-lgam(1-z);z-=1;var a=c[0],t=z+7.5;for(var i=1;i<9;i++)a+=c[i]/(z+i);return 0.5*Math.log(2*Math.PI)+(z+0.5)*Math.log(t)-t+Math.log(a);}
+  function log10In1(dd){var a=dd/2,x=0.5,term=1/a,sum=term;for(var n=1;n<500;n++){term*=x/(a+n);sum+=term;if(term<sum*1e-15)break;}return (a*Math.log(x)-x-lgam(a)+Math.log(sum))/Math.LN10;}
+  function draw(){
+    var R=Math.max(4,Math.sqrt(d)+4),rs=d>1?Math.sqrt(d-1):0,n=600,base=H-40,top=26,s='',i;
+    function X(r){return x0+r/R*(x1-x0);}function Y(v){return base-v*(base-top);}
+    var pd=[],ps=[],pm=[];
+    for(i=0;i<=n;i++){var r=i/n*R,rr=Math.max(r,1e-9);
+      pd.push([X(r),Y(Math.exp(-r*r/2))]);
+      ps.push([X(r),Y(d===1?1:Math.exp((d-1)*Math.log(rr/R)))]);
+      var lm=d===1?-r*r/2:(d-1)*(Math.log(rr)-Math.log(rs))-(r*r-rs*rs)/2;pm.push([X(r),Y(Math.exp(lm))]);}
+    s+=E('line',{x1:x0,x2:x1,y1:base,y2:base,stroke:C.rule});
+    var step=R>60?20:R>20?5:R>8?2:1;
+    for(var tk=0;tk<=R+1e-9;tk+=step){s+=E('line',{x1:X(tk),x2:X(tk),y1:base,y2:base+5,stroke:C.axis});s+=txt(X(tk),base+18,String(tk),{'font-size':11,fill:C.muted,'text-anchor':'middle'});}
+    s+=txt(x1,base+34,'离原点的距离 →',{'font-size':11.5,fill:C.ink2,'text-anchor':'end'});
+    s+=E('path',{d:path([[X(0),base]].concat(pm,[[X(R),base]]))+'Z',fill:'rgba(214,149,0,.22)',stroke:'none'});
+    s+=E('path',{d:path(pm),fill:'none',stroke:C.guess,'stroke-width':2.4});
+    s+=E('path',{d:path(ps),fill:'none',stroke:C.muted,'stroke-width':1.6,'stroke-dasharray':'2 4'});
+    s+=E('path',{d:path(pd),fill:'none',stroke:C.ink,'stroke-width':2,'stroke-dasharray':'6 4'});
+    s+=E('circle',{cx:X(0),cy:Y(1),r:5,fill:C.ink});
+    s+=txt(X(0)+9,Y(1)+4,'原点：密度最高',{'font-size':12.5,'font-weight':700,fill:C.ink,stroke:'#fff','stroke-width':3,'paint-order':'stroke'});
+    if(d>1){var right=X(rs)>x1-170;s+=E('line',{x1:X(rs),x2:X(rs),y1:top-6,y2:base,stroke:C.guessInk,'stroke-dasharray':'3 3'});
+      s+=txt(X(rs)+(right?-8:8),top+6,'样本最集中：距离 ≈ '+(rs<10?rs.toFixed(2):rs.toFixed(1)),{'font-size':12.5,'font-weight':700,fill:C.guessInk,'text-anchor':right?'end':'start',stroke:'#fff','stroke-width':3,'paint-order':'stroke'});}
+    $('mxBSvg').innerHTML=svg(W,H,s);
+    var lr=(d-1)/(2*Math.LN10),lp=log10In1(d);
+    var pin=lp>-4?(Math.pow(10,lp)*100).toFixed(lp>-2?1:3)+'%':'约 10<sup>'+Math.round(lp)+'</sup>';
+    var ratio=lr<3?Math.pow(10,lr).toFixed(1)+' 倍':'10<sup>'+lr.toFixed(0)+'</sup> 倍';
+    $('mxBOut').innerHTML=d===1?'1 维：最可能的点（原点）就在样本最多的地方，随手抽一个样本，落在离原点 1 以内的概率是 <b>'+pin+'</b>。':(d+' 维：原点的密度约是"样本最集中那一圈"上一个点的 '+ratio+'；但随手抽一个样本，落在离原点 1 以内的概率只有 <b>'+pin+'</b>。');
+  }
+  chips($('mxBChips'),[[1,'1 维'],[2,'2 维'],[3,'3 维'],[10,'10 维'],[100,'100 维'],[1000,'1000 维'],[9216,'9216 维（64×48 彩图）']],d,function(v){d=v;draw();});
+  draw();
+  (function strip(){
+    var el=$('mxBImg');if(!el)return;var SW=64,SH=48,NP=SW*SH,DIM=NP*3;el.style.setProperty('--n',6);
+    function gauss(g){var u=0;while(u===0)u=g();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*g());}
+    function canvasOf(v){var c=document.createElement('canvas');c.width=SW;c.height=SH;var g=c.getContext('2d'),im=g.createImageData(SW,SH);for(var k=0,q=0;k<NP;k++,q+=4){for(var ch=0;ch<3;ch++){var u=(v[k*3+ch]+1)*127.5;im.data[q+ch]=u<0?0:u>255?255:u;}im.data[q+3]=255;}g.putImageData(im,0,0);return c;}
+    function cellOf(v,label,cls){var dv=document.createElement('div');dv.className='imc'+(cls?' '+cls:'');dv.appendChild(canvasOf(v));var l=document.createElement('div');l.className='lb';l.innerHTML=label;dv.appendChild(l);return dv;}
+    el.appendChild(cellOf(new Float32Array(DIM),'密度最高<br>离原点 0','out'));
+    for(var j=0;j<5;j++){var g=mulberry(5000+j*31),v=new Float32Array(DIM),ss=0;for(var k=0;k<DIM;k++){v[k]=gauss(g);ss+=v[k]*v[k];}el.appendChild(cellOf(v,'样本 '+(j+1)+'<br>离原点 '+Math.sqrt(ss).toFixed(1)));}
+  })();
+})();
+
+})();
+</script>
+</body>
+</html>
